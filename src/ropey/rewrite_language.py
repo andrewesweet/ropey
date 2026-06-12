@@ -149,6 +149,32 @@ def widening_args(args: ConstraintArgs) -> ConstraintArgs:
     return widened
 
 
+def validate_imports(imports: list[str] | None) -> list[str]:
+    """Check each entry is one import statement; the server adds them to
+    changed modules verbatim (and never infers any — that is ty's job)."""
+    for entry in imports or []:
+        if not _is_import_statement(entry):
+            raise StructuredFailure(
+                FailureKind.INVALID_ARGUMENT,
+                f"The imports entry {entry!r} is not an import statement; "
+                "pass each as written in source, e.g. "
+                "'from myapp.helpers import migrate'.",
+            )
+    return list(imports or [])
+
+
+def _is_import_statement(entry: object) -> bool:
+    if not isinstance(entry, str):
+        return False
+    try:
+        statements = ast.parse(entry).body
+    except SyntaxError:
+        return False
+    return len(statements) == 1 and isinstance(
+        statements[0], (ast.Import, ast.ImportFrom)
+    )
+
+
 def _wildcard_names(template: str, kind: str, label: str) -> set[str]:
     names = set(CodeTemplate(template).get_names())
     malformed = {name for name in names if not name.isidentifier()}

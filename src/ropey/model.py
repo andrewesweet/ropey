@@ -242,6 +242,7 @@ class FailureKind:
     INVALID_PATTERN = "invalid-pattern"
     INVALID_GOAL = "invalid-goal"
     INVALID_MATCH_CONSTRAINT = "invalid-match-constraint"
+    REWRITE_WOULD_BREAK_SYNTAX = "rewrite-would-break-syntax"
     UNPARSABLE_FILE = "unparsable-file"
     INVALID_ARGUMENT = "invalid-argument"
     INTERNAL_ERROR = "internal-error"

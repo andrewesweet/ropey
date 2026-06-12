@@ -496,6 +496,133 @@ class TestUnsureKnob:
         assert dry["blast_radius"] == live["blast_radius"]
 
 
+SYNTAX_BREAK_FIXTURE = {
+    "store.py": "record = object()\nvalue = record.save()\n",
+}
+
+# Parses standalone, but substituted into the expression context of
+# ``value = record.save()`` it yields ``value = if record: ...`` — broken.
+BREAKING_GOAL = "if ${x}:\n    pass"
+
+
+class TestSyntaxGuard:
+    def test_a_syntax_breaking_goal_fails_at_dry_run_naming_the_parse_location(
+        self, make_repo, call_tool
+    ):
+        repo = make_repo(SYNTAX_BREAK_FIXTURE)
+        report = call_tool(
+            "rewrite",
+            {"pattern": SAVE_PATTERN, "goal": BREAKING_GOAL, "root": str(repo)},
+        )
+        assert report["status"] == "failure"
+        assert report["failure"]["kind"] == "rewrite-would-break-syntax"
+        assert "store.py" in report["failure"]["reason"]
+        assert "line" in report["failure"]["reason"]
+        assert (repo / "store.py").read_text() == SYNTAX_BREAK_FIXTURE["store.py"]
+
+    def test_a_cold_live_run_fails_the_same_way_with_nothing_written(
+        self, make_repo, call_tool
+    ):
+        repo = make_repo(SYNTAX_BREAK_FIXTURE)
+        report = call_tool(
+            "rewrite",
+            {
+                "pattern": SAVE_PATTERN,
+                "goal": BREAKING_GOAL,
+                "apply": True,
+                "root": str(repo),
+            },
+        )
+        assert report["status"] == "failure"
+        assert report["failure"]["kind"] == "rewrite-would-break-syntax"
+        assert (repo / "store.py").read_text() == SYNTAX_BREAK_FIXTURE["store.py"]
+
+
+IMPORTS_FIXTURE = {
+    "helpers.py": "def migrate(value):\n    return value\n",
+    "app.py": "record = object()\nrecord.old_style()\n",
+    "already.py": (
+        "from helpers import migrate\n"
+        "\n"
+        "item = object()\n"
+        "item.old_style()\n"
+    ),
+}
+
+OLD_STYLE_PATTERN = "${x}.old_style()"
+MIGRATE_GOAL = "migrate(${x})"
+MIGRATE_IMPORT = "from helpers import migrate"
+
+
+class TestImports:
+    def test_supplied_imports_are_added_to_each_changed_module(
+        self, make_repo, call_tool
+    ):
+        repo = make_repo(IMPORTS_FIXTURE)
+        report = call_tool(
+            "rewrite",
+            {
+                "pattern": OLD_STYLE_PATTERN,
+                "goal": MIGRATE_GOAL,
+                "imports": [MIGRATE_IMPORT],
+                "apply": True,
+                "root": str(repo),
+            },
+        )
+        app = (repo / "app.py").read_text()
+        assert MIGRATE_IMPORT in app
+        assert "migrate(record)" in app
+        assert (repo / "helpers.py").read_text() == IMPORTS_FIXTURE["helpers.py"]
+        assert "app.py" in blast_paths(report)
+
+    def test_an_already_present_import_is_not_doubled(self, make_repo, call_tool):
+        repo = make_repo(IMPORTS_FIXTURE)
+        call_tool(
+            "rewrite",
+            {
+                "pattern": OLD_STYLE_PATTERN,
+                "goal": MIGRATE_GOAL,
+                "imports": [MIGRATE_IMPORT],
+                "apply": True,
+                "root": str(repo),
+            },
+        )
+        already = (repo / "already.py").read_text()
+        assert already.count(MIGRATE_IMPORT) == 1
+        assert "migrate(item)" in already
+
+    def test_no_import_inference_omitting_imports_leaves_them_absent(
+        self, make_repo, call_tool
+    ):
+        repo = make_repo(IMPORTS_FIXTURE)
+        call_tool(
+            "rewrite",
+            {
+                "pattern": OLD_STYLE_PATTERN,
+                "goal": MIGRATE_GOAL,
+                "apply": True,
+                "root": str(repo),
+            },
+        )
+        app = (repo / "app.py").read_text()
+        assert "migrate(record)" in app
+        assert "import" not in app
+
+    def test_a_non_import_entry_is_a_structured_failure(self, make_repo, call_tool):
+        repo = make_repo(IMPORTS_FIXTURE)
+        report = call_tool(
+            "rewrite",
+            {
+                "pattern": OLD_STYLE_PATTERN,
+                "goal": MIGRATE_GOAL,
+                "imports": ["x = 1"],
+                "root": str(repo),
+            },
+        )
+        assert report["status"] == "failure"
+        assert report["failure"]["kind"] == "invalid-argument"
+
+
 class TestSearchScope:
     def test_gitignored_textual_match_is_neither_matched_nor_reported(
         self, make_repo, call_tool

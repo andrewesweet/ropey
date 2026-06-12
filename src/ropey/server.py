@@ -610,7 +610,14 @@ def _register_rewrite(mcp: FastMCP, rewriter: RewriteRunner) -> None:
             "common in dynamically typed code). Unsure sites are surfaced "
             "but not rewritten, so nothing is silently skipped; add unsure: "
             "true to a Wildcard's constraints to rewrite them too — they "
-            "stay flagged unsure in the result for you to audit. Defaults "
+            "stay flagged unsure in the result for you to audit. When the "
+            "Goal introduces a name the target modules do not import, pass "
+            "imports (a list of import statements, added to each changed "
+            "module, deduplicated); the tool never infers imports — "
+            "checking for missing names is your LSP's job, so an omitted "
+            "import leaves broken code. A rewrite that would produce "
+            "unparsable Python fails safely in either mode, naming the file "
+            "and parse location, with nothing written. Defaults "
             "to a Dry Run that previews without writing; review every Match "
             "Site for over-matching before setting apply=true. Both modes "
             "report the "
@@ -628,6 +635,7 @@ def _register_rewrite(mcp: FastMCP, rewriter: RewriteRunner) -> None:
         pattern: str,
         goal: str,
         constraints: dict[str, dict[str, Any]] | None = None,
+        imports: list[str] | None = None,
         apply: bool = False,
         root: str | None = None,
     ) -> dict[str, Any]:
@@ -636,6 +644,7 @@ def _register_rewrite(mcp: FastMCP, rewriter: RewriteRunner) -> None:
                 pattern=pattern,
                 goal=goal,
                 constraints=constraints,
+                imports=imports,
                 apply=apply,
                 root=root,
             )
