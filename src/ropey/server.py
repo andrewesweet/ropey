@@ -7,6 +7,7 @@ Occurrence, Structured Failure) — no rope type and no offset crosses here.
 
 from __future__ import annotations
 
+import threading
 from typing import Any
 
 from mcp.server.fastmcp import FastMCP
@@ -15,24 +16,33 @@ from .model import FailureKind, Position, Range, StructuredFailure
 from .operability import configure_logging
 from .project_provider import ProjectProvider
 from .refactoring_runner import RefactoringRunner
+from .rewrite_runner import RewriteRunner
 
 SERVER_INSTRUCTIONS = """\
-ropey performs behaviour-preserving Python refactorings project-wide using
-LSP coordinates. Use your LSP (ty) to find and read code; use ropey to
-change it. Every tool previews with apply=false (Dry Run, writes nothing)
-and applies with apply=true (Live Run); both report the same full Blast
+ropey changes Python code structure project-wide using LSP coordinates.
+Use your LSP (ty) to find and read code; use ropey to change it. The
+catalogue is behaviour-preserving refactorings plus one Rewrite (a
+pattern->goal transformation whose equivalence you assert, not the tool).
+Every tool previews with apply=false (Dry Run, writes nothing) and
+applies with apply=true (Live Run); both report the same full Blast
 Radius. Reversal is git — prefer a clean working tree before a Live Run,
 and use `git diff` afterwards for exact text.
 """
 
 
 def create_server() -> FastMCP:
-    """Compose the server: project cache, lock, and tool registration."""
-    runner = RefactoringRunner(ProjectProvider())
+    """Compose the server: project cache, shared engine lock, tool registration."""
+    provider = ProjectProvider()
+    # One lock across both runners: rope Projects are not thread-safe, so
+    # the whole engine executes one call at a time.
+    engine_lock = threading.Lock()
+    runner = RefactoringRunner(provider, engine_lock)
+    rewriter = RewriteRunner(provider, engine_lock)
     mcp = FastMCP("ropey", instructions=SERVER_INSTRUCTIONS)
     _register_rename_tool(mcp, runner)
     _register_catalogue(mcp, runner)
     _register_tier_2_and_3(mcp, runner)
+    _register_rewrite(mcp, rewriter)
     return mcp
 
 
@@ -570,6 +580,47 @@ def _register_tier_2_and_3(mcp: FastMCP, runner: RefactoringRunner) -> None:
                 apply=apply,
                 root=root,
                 expected_symbol=expected_symbol,
+            )
+        )
+
+
+def _register_rewrite(mcp: FastMCP, rewriter: RewriteRunner) -> None:
+    @mcp.tool(
+        name="rewrite",
+        description=(
+            "Rewrite every site matching a structural Pattern into a Goal, "
+            "project-wide — for transformations no dedicated refactoring "
+            "expresses, such as migrating a deprecated call form "
+            "(${obj}.get_attribute(${key}) -> ${obj}[${key}]) or collapsing "
+            "an idiom. The Pattern is Python source with ${wildcard} "
+            "placeholders; the Goal is the replacement template reusing "
+            "those Wildcards. Prefer a dedicated behaviour-preserving tool "
+            "(rename, inline, change_signature, move, use_function) "
+            "whenever one fits; use rewrite only when none does, because a "
+            "Rewrite is not behaviour-preserving: you assert that Pattern "
+            "and Goal are equivalent, and the tool guarantees only that it "
+            "rewrites exactly the Match Sites it reports. Defaults to a Dry "
+            "Run that previews without writing; review every Match Site for "
+            "over-matching before setting apply=true. Both modes report the "
+            "file-level Blast Radius and every Match Site (file + Range in "
+            "0-based UTF-16 LSP coordinates, against the pre-apply text — "
+            "live targets for your LSP on a Dry Run, audit records after a "
+            "Live Run). Start from a clean git tree, since git is the "
+            "reversal mechanism, and run `git diff` after a Live Run to "
+            "verify the equivalence you asserted. Pass root (the project "
+            "directory) explicitly. Keep navigation and reading with your "
+            "LSP; this tool only changes code."
+        ),
+    )
+    def rewrite(
+        pattern: str,
+        goal: str,
+        apply: bool = False,
+        root: str | None = None,
+    ) -> dict[str, Any]:
+        return _dispatch(
+            lambda: rewriter.rewrite(
+                pattern=pattern, goal=goal, apply=apply, root=root
             )
         )
 

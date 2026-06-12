@@ -29,6 +29,10 @@ POINT_TOOLS = {
 }
 SELECTION_TOOLS = {"extract_method", "extract_variable", "introduce_parameter"}
 FILE_ONLY_TOOLS = {"module_to_package", "organize_imports"}
+# Pattern-addressed tools (ADR 0005): exempt from the point/selection
+# coordinate-convention check; they gain their own checks at the landing
+# slice (issue #29).
+PATTERN_TOOLS = {"rewrite"}
 
 OVER_STRONG_MODALS = ["CRITICAL", "MUST", "ALWAYS", "NEVER", "IMPORTANT"]
 ENGINE_INTERNALS = [r"\brope\b", r"\boffsets?\b", r"\bChangeSet\b"]
@@ -46,7 +50,9 @@ def descriptions() -> dict[str, str]:
 
 
 def test_the_whole_catalogue_is_registered(descriptions):
-    assert set(descriptions) == POINT_TOOLS | SELECTION_TOOLS | FILE_ONLY_TOOLS
+    assert set(descriptions) == (
+        POINT_TOOLS | SELECTION_TOOLS | FILE_ONLY_TOOLS | PATTERN_TOOLS
+    )
 
 
 def test_no_over_strong_modal_phrasing(descriptions):

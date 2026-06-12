@@ -19,6 +19,9 @@ class Position:
     line: int
     character: int
 
+    def to_dict(self) -> dict[str, int]:
+        return {"line": self.line, "character": self.character}
+
 
 @dataclass(frozen=True)
 class Range:
@@ -26,6 +29,9 @@ class Range:
 
     start: Position
     end: Position
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"start": self.start.to_dict(), "end": self.end.to_dict()}
 
 
 class ChangeKind(str, Enum):
@@ -78,6 +84,111 @@ class UncertainOccurrence:
         }
 
 
+class MatchCertainty(str, Enum):
+    """A Match Site's footing: a claim about Match Constraint satisfaction only.
+
+    Never an equivalence claim — nothing in a Rewrite is tool-proven
+    (ADR 0005), so "proven" is deliberately absent from this vocabulary.
+    """
+
+    MATCHED = "matched"
+    UNSURE = "unsure"
+
+
+@dataclass(frozen=True)
+class MatchSite:
+    """A Location where a Rewrite's Pattern fired, in pre-apply coordinates.
+
+    On a Dry Run the Range is a live target for the LSP; after a Live Run
+    it is an audit record of the pre-apply text (``git diff`` verifies the
+    new text). ``included`` states whether the site is part of the rewrite:
+    an unsure site is included only when its Wildcard sets the ``unsure``
+    Match Constraint.
+    """
+
+    path: str
+    range: Range
+    snippet: str
+    certainty: MatchCertainty = MatchCertainty.MATCHED
+    included: bool = True
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "path": self.path,
+            "range": self.range.to_dict(),
+            "snippet": self.snippet,
+            "certainty": self.certainty.value,
+            "included": self.included,
+        }
+
+
+MATCH_SITE_CAP = 100
+
+
+@dataclass(frozen=True)
+class RewriteReport:
+    """The result of a Rewrite: identical detail on Dry Run and Live Run.
+
+    The Blast Radius and the total Match Site count are always complete;
+    only the per-site enumeration is capped, and only loudly (unsure sites
+    first — they carry the highest adjudication value).
+    """
+
+    applied: bool
+    blast_radius: tuple[BlastRadiusEntry, ...]
+    match_sites: tuple[MatchSite, ...]
+
+    def to_dict(self) -> dict[str, Any]:
+        shown, truncation = self._enumerate_within_cap()
+        result = {
+            "status": "applied" if self.applied else "dry_run",
+            "summary": self._summary(),
+            "match_site_count": len(self.match_sites),
+            "unsure_count": self._unsure_count(),
+            "match_sites": [site.to_dict() for site in shown],
+            "blast_radius": [entry.to_dict() for entry in self.blast_radius],
+        }
+        if truncation is not None:
+            result["truncation"] = truncation
+        return result
+
+    def _unsure_count(self) -> int:
+        return sum(
+            1 for site in self.match_sites
+            if site.certainty is MatchCertainty.UNSURE
+        )
+
+    def _summary(self) -> str:
+        total = len(self.match_sites)
+        if total == 0:
+            return "0 Match Sites — the Pattern fired nowhere in the Search Scope."
+        summary = f"{total} Match Sites ({self._unsure_count()} unsure)"
+        excluded = sum(1 for site in self.match_sites if not site.included)
+        if excluded:
+            summary += (
+                f"; {excluded} unsure of those not rewritten — set the unsure "
+                "Match Constraint to include them"
+            )
+        return summary + "."
+
+    def _enumerate_within_cap(
+        self,
+    ) -> tuple[tuple[MatchSite, ...], str | None]:
+        total = len(self.match_sites)
+        if total <= MATCH_SITE_CAP:
+            return self.match_sites, None
+        unsure_first = sorted(
+            self.match_sites,
+            key=lambda site: site.certainty is not MatchCertainty.UNSURE,
+        )
+        truncation = (
+            f"showing {MATCH_SITE_CAP} of {total} Match Sites, unsure sites "
+            "first. A truncated enumeration is an incomplete audit — tighten "
+            "the Pattern or Match Constraints and re-run before a Live Run."
+        )
+        return tuple(unsure_first[:MATCH_SITE_CAP]), truncation
+
+
 @dataclass(frozen=True)
 class RefactoringReport:
     """The result of a Refactoring: identical detail on Dry Run and Live Run."""
@@ -128,6 +239,8 @@ class FailureKind:
     EXPECTED_SYMBOL_MISMATCH = "expected-symbol-mismatch"
     TARGET_NOT_REFACTORABLE = "target-not-refactorable"
     INVALID_SELECTION = "invalid-selection"
+    INVALID_PATTERN = "invalid-pattern"
+    INVALID_GOAL = "invalid-goal"
     UNPARSABLE_FILE = "unparsable-file"
     INVALID_ARGUMENT = "invalid-argument"
     INTERNAL_ERROR = "internal-error"

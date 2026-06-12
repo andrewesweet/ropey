@@ -12,7 +12,10 @@ import json
 import logging
 import sys
 import time
+from contextlib import contextmanager
 from dataclasses import dataclass, field
+
+from .model import StructuredFailure
 
 logger = logging.getLogger("ropey.operability")
 
@@ -31,18 +34,20 @@ class CallMetrics:
     """The per-call record: timings, scope, and outcome."""
 
     tool: str
+    event: str = "refactoring-call"
     root: str | None = None
     scope_file_count: int | None = None
     lock_wait_ms: float | None = None
     validate_ms: float | None = None
     refactoring_ms: float | None = None
+    match_scan_ms: float | None = None
     outcome: str | None = None
     failure_kind: str | None = None
     _start: float = field(default_factory=time.perf_counter)
 
     def emit(self) -> None:
         record = {
-            "event": "refactoring-call",
+            "event": self.event,
             "tool": self.tool,
             "root": self.root,
             "scope_file_count": self.scope_file_count,
@@ -52,9 +57,32 @@ class CallMetrics:
             "total_ms": _round((time.perf_counter() - self._start) * 1000),
             "outcome": self.outcome,
         }
+        if self.match_scan_ms is not None:
+            record["match_scan_ms"] = _round(self.match_scan_ms)
         if self.failure_kind:
             record["failure_kind"] = self.failure_kind
         logger.info(json.dumps(record))
+
+
+@contextmanager
+def observed(metrics: CallMetrics):
+    """Classify the call's outcome on failure and emit exactly one record.
+
+    The caller sets the success outcome ("applied"/"dry") inside the block;
+    any escaping exception is classified here so no path skips the record.
+    """
+    try:
+        yield
+    except StructuredFailure as failure:
+        metrics.outcome = "failure"
+        metrics.failure_kind = failure.kind
+        raise
+    except Exception:
+        metrics.outcome = "failure"
+        metrics.failure_kind = "internal-error"
+        raise
+    finally:
+        metrics.emit()
 
 
 def _round(value: float | None) -> float | None:

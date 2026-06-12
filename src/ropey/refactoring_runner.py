@@ -56,7 +56,7 @@ from .model import (
     StructuredFailure,
     UncertainOccurrence,
 )
-from .operability import CallMetrics, Stopwatch
+from .operability import CallMetrics, Stopwatch, observed
 from .project_provider import ProjectProvider
 
 
@@ -89,9 +89,11 @@ class UncertainOccurrenceCollector:
 class RefactoringRunner:
     """Runs each Refactoring of the catalogue against a fresh, scoped Project."""
 
-    def __init__(self, provider: ProjectProvider):
+    def __init__(
+        self, provider: ProjectProvider, lock: threading.Lock | None = None
+    ):
         self._provider = provider
-        self._lock = threading.Lock()
+        self._lock = lock if lock is not None else threading.Lock()
 
     # -- the shared call skeleton -------------------------------------------
 
@@ -105,7 +107,7 @@ class RefactoringRunner:
         build: Callable[[Project, object, UncertainOccurrenceCollector], Change],
     ) -> RefactoringReport:
         metrics = CallMetrics(tool=tool)
-        try:
+        with observed(metrics):
             with Stopwatch() as lock_wait:
                 self._lock.acquire()
             try:
@@ -134,16 +136,6 @@ class RefactoringRunner:
                 blast_radius=blast_radius,
                 uncertain_occurrences=tuple(collector.occurrences),
             )
-        except StructuredFailure as failure:
-            metrics.outcome = "failure"
-            metrics.failure_kind = failure.kind
-            raise
-        except Exception:
-            metrics.outcome = "failure"
-            metrics.failure_kind = "internal-error"
-            raise
-        finally:
-            metrics.emit()
 
     def _point_offset(
         self, resource, position: Position, expected_symbol: str | None
