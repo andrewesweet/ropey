@@ -1,6 +1,6 @@
 # Operability
 
-Every tool call emits one structured JSON record to **stderr** (stdout
+Every tool call emits one structured JSON record to stderr (stdout
 belongs to the MCP stdio protocol):
 
 ```json
@@ -11,7 +11,7 @@ belongs to the MCP stdio protocol):
 
 Fields: resolved root, Search Scope file count, `validate()` ms (the
 Freshness pass), refactoring ms, lock-wait ms, total ms, and the outcome
-(`applied` / `dry` / `failure` with `failure_kind`). No metrics stack —
+(`applied` / `dry` / `failure` with `failure_kind`). No metrics stack;
 logs only (PRD Operability).
 
 ## Measured capacity envelope
@@ -24,10 +24,11 @@ Measured 2026-06-12 via `scripts/calibrate_envelope.py` (WSL2, Python
 | small   | 52    | 19 ms           | 0.6 ms            | 8 ms            | 35 MB    |
 | large   | 2 002 | 616 ms          | 21 ms             | 254 ms          | 49 MB    |
 
-Against the PRD envelope: reality is comfortably **better** than the
-order-of-magnitude expectations (cold ≈ hundreds of files/second parsed —
-observed ~3 300 files/s; warm validate ≈ 10⁴–10⁵ stats/s — observed
-~10⁵/s; memory tens of MB). No revision to the PRD envelope is needed.
+Against the PRD envelope, the measurements beat the order-of-magnitude
+expectations. Cold parsing was expected at roughly hundreds of files per
+second; observed ~3 300 files/s. Warm validate was expected at
+10⁴–10⁵ stats/s; observed ~10⁵/s. Memory stays in the tens of MB. The
+PRD envelope needs no revision.
 
 ### Rewrite match scan (PRD 0002)
 
@@ -50,5 +51,5 @@ revision needed.
 The hook accelerator triggers only if p50 `validate()` exceeds ~250 ms on
 real repos. Observed: 21 ms at 2 000 files, extrapolating to ~1 s only at
 100 k-file monorepo scale. On repos of the size ropey currently serves,
-the trigger is **not** crossed. The go/no-go remains a human decision on
+the trigger stays uncrossed. The go/no-go remains a human decision on
 issue #20, using these logged timings.

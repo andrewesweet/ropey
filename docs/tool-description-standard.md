@@ -29,7 +29,7 @@ implies here:
    doubt, use [tool]' will cause overtriggering."** → Triggers name the
    concrete situation (renaming a symbol used across files), not a
    blanket "default to this tool".
-5. **"Tell Claude what to do instead of what not to do"** — balanced
+5. **"Tell Claude what to do instead of what not to do"**, balanced
    against the routing need: each description states the positive
    route for out-of-scope work ("use your LSP to find and read;
    black/ruff to format") rather than bare prohibitions.
@@ -67,16 +67,16 @@ Every tool description must:
 ## The third input category: Pattern-addressed tools
 
 ADR 0005 admitted the Rewrite, which is neither a point nor a selection
-tool: it is addressed by a **Pattern** and **Goal**, not a Location. For
+tool: it is addressed by a Pattern and Goal, not a Location. For
 these tools the checklist adapts:
 
 - **D5 exemption.** No input coordinates exist, so the 0-based/UTF-16
   *input* check does not apply. The description instead explains the
-  input language — Pattern, Goal, Wildcard, Match Constraint — by name
+  input language (Pattern, Goal, Wildcard, Match Constraint) by name
   and with a concrete example, and states the coordinate convention for
   the Match Site Ranges the tool *returns*.
 - **New mandatory content.** The description must state, in calibrated
-  language: that the tool is **not behaviour-preserving** and the agent
+  language: that the tool is not behaviour-preserving and the agent
   owns the Pattern↔Goal equivalence; the routing rule (prefer a
   dedicated behaviour-preserving refactoring whenever one fits); the
   Dry-Run-first steer; Match Constraints as the over-match control plus
@@ -111,12 +111,12 @@ point-by-point against D1–D8 plus the third-category checks on
 2026-06-12: outcome-first opening with a concrete Pattern/Goal example
 (D1, D5-adapted); calibrated prefer-a-dedicated-refactoring routing
 (D2); LSP routing for navigation and import inference (D3); motivated
-safety throughout — why the agent owns equivalence, why clean tree, why
-unsure sites are excluded by default (D4); transaction model and Dry
-Run default (D6); Blast Radius, Match Sites, certainty, truncation
-steer, and `git diff` (D7); self-contained with no engine internals
-(D8). All seven mandatory content items of the third category are
-present and mechanically enforced where feasible.
+safety throughout, covering why the agent owns equivalence, why clean
+tree, and why unsure sites are excluded by default (D4); transaction
+model and Dry Run default (D6); Blast Radius, Match Sites, certainty,
+truncation steer, and `git diff` (D7); self-contained with no engine
+internals (D8). All seven mandatory content items of the third category
+are present and mechanically enforced where feasible.
 
 | Check | Enforced by |
 | ----- | ----------- |
