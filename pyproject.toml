@@ -1,6 +1,6 @@
 [project]
 name = "ropey"
-version = "0.1.0"
+version = "0.2.0"
 description = "MCP server exposing rope's Python refactoring catalogue to coding agents. ty finds and reads; ropey changes."
 readme = "README.md"
 authors = [

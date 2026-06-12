@@ -8,7 +8,7 @@
     {
       "name": "ropey",
       "source": "./plugin/ropey",
-      "description": "Safe, project-wide Python refactoring tools (rename, move, extract, inline, change signature, and more) powered by rope. ty finds and reads; ropey changes."
+      "description": "Safe, project-wide Python refactoring tools (rename, move, extract, inline, change signature, and more) plus a pattern→goal rewrite, powered by rope. ty finds and reads; ropey changes."
     }
   ]
 }
