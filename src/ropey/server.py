@@ -599,9 +599,21 @@ def _register_rewrite(mcp: FastMCP, rewriter: RewriteRunner) -> None:
             "whenever one fits; use rewrite only when none does, because a "
             "Rewrite is not behaviour-preserving: you assert that Pattern "
             "and Goal are equivalent, and the tool guarantees only that it "
-            "rewrites exactly the Match Sites it reports. Defaults to a Dry "
-            "Run that previews without writing; review every Match Site for "
-            "over-matching before setting apply=true. Both modes report the "
+            "rewrites exactly the Match Sites it reports. Control "
+            "over-matching with per-Wildcard Match Constraints, e.g. "
+            'constraints={"obj": {"type": "myapp.models.User"}}: name / '
+            "type / object / instance narrow by a symbol's dotted path "
+            "(one per Wildcard; instance also admits subclasses), and "
+            "exact: true narrows to the Wildcard's literal name. Each Match "
+            "Site reports its certainty: matched (constraints satisfied) or "
+            "unsure (a constraint that cannot be established at that site, "
+            "common in dynamically typed code). Unsure sites are surfaced "
+            "but not rewritten, so nothing is silently skipped; add unsure: "
+            "true to a Wildcard's constraints to rewrite them too — they "
+            "stay flagged unsure in the result for you to audit. Defaults "
+            "to a Dry Run that previews without writing; review every Match "
+            "Site for over-matching before setting apply=true. Both modes "
+            "report the "
             "file-level Blast Radius and every Match Site (file + Range in "
             "0-based UTF-16 LSP coordinates, against the pre-apply text — "
             "live targets for your LSP on a Dry Run, audit records after a "
@@ -615,12 +627,17 @@ def _register_rewrite(mcp: FastMCP, rewriter: RewriteRunner) -> None:
     def rewrite(
         pattern: str,
         goal: str,
+        constraints: dict[str, dict[str, Any]] | None = None,
         apply: bool = False,
         root: str | None = None,
     ) -> dict[str, Any]:
         return _dispatch(
             lambda: rewriter.rewrite(
-                pattern=pattern, goal=goal, apply=apply, root=root
+                pattern=pattern,
+                goal=goal,
+                constraints=constraints,
+                apply=apply,
+                root=root,
             )
         )
 

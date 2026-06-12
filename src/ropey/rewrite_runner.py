@@ -23,7 +23,7 @@ from .match_enumerator import enumerate_match_sites
 from .model import RewriteReport
 from .operability import CallMetrics, Stopwatch, observed
 from .project_provider import ProjectProvider
-from .rewrite_language import validate_templates
+from .rewrite_language import validate_constraints, validate_templates
 
 
 class RewriteRunner:
@@ -38,12 +38,14 @@ class RewriteRunner:
         *,
         pattern: str,
         goal: str,
+        constraints: dict[str, dict[str, object]] | None = None,
         apply: bool,
         root: str | None = None,
     ) -> RewriteReport:
         metrics = CallMetrics(tool="rewrite", event="rewrite-call")
         with observed(metrics):
-            validate_templates(pattern, goal)
+            wildcards = validate_templates(pattern, goal)
+            args = validate_constraints(constraints, wildcards)
             with Stopwatch() as lock_wait:
                 self._lock.acquire()
             try:
@@ -54,9 +56,11 @@ class RewriteRunner:
                     project = self._provider.get_project(scope_root, metrics)
                     with Stopwatch() as match_scan:
                         changes = Restructure(
-                            project, pattern, goal
+                            project, pattern, goal, args=dict(args)
                         ).get_changes()
-                        match_sites = enumerate_match_sites(project, pattern)
+                        match_sites = enumerate_match_sites(
+                            project, pattern, args
+                        )
                     metrics.match_scan_ms = match_scan.ms
                     blast_radius = report(changes)
                     if apply and blast_radius:

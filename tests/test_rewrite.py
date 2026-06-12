@@ -6,6 +6,7 @@ Blast Radius, Match Sites, Structured Failures — never internals.
 
 from __future__ import annotations
 
+import json
 import logging
 
 from conftest import blast_paths, entry_for
@@ -162,6 +163,337 @@ class TestMalformedTemplates:
         )
         assert report["status"] == "failure"
         assert report["failure"]["kind"] == "invalid-goal"
+
+
+CONSTRAINT_FIXTURE = {
+    "models.py": (
+        "class Model:\n"
+        "    def save(self):\n"
+        "        return 'saved'\n"
+        "\n"
+        "\n"
+        "class Audited(Model):\n"
+        "    pass\n"
+    ),
+    "handlers.py": (
+        "from models import Model\n"
+        "\n"
+        "record = Model()\n"
+        "record.save()\n"
+        "\n"
+        "cache = {'a': 1}\n"
+        "cache.save()\n"
+    ),
+    "tasks.py": "def touch(thing):\n    thing.save()\n",
+}
+
+SAVE_PATTERN = "${x}.save()"
+SAVE_GOAL = "${x}.persist()"
+
+
+def sites_by_path(report: dict) -> dict[str, dict]:
+    return {site["path"]: site for site in report["match_sites"]}
+
+
+class TestMatchConstraints:
+    def test_unconstrained_pattern_matches_every_site_as_matched(
+        self, make_repo, call_tool
+    ):
+        repo = make_repo(CONSTRAINT_FIXTURE)
+        report = call_tool(
+            "rewrite",
+            {"pattern": SAVE_PATTERN, "goal": SAVE_GOAL, "root": str(repo)},
+        )
+        assert report["match_site_count"] == 3
+        assert all(s["certainty"] == "matched" for s in report["match_sites"])
+        assert all(s["included"] for s in report["match_sites"])
+
+    def test_type_constraint_drops_the_provably_wrong_site(
+        self, make_repo, call_tool
+    ):
+        repo = make_repo(CONSTRAINT_FIXTURE)
+        report = call_tool(
+            "rewrite",
+            {
+                "pattern": SAVE_PATTERN,
+                "goal": SAVE_GOAL,
+                "constraints": {"x": {"type": "models.Model"}},
+                "root": str(repo),
+            },
+        )
+        sites = sites_by_path(report)
+        assert set(sites) == {"handlers.py", "tasks.py"}
+        assert sites["handlers.py"]["certainty"] == "matched"
+        assert sites["handlers.py"]["snippet"] == "record.save()"
+
+    def test_unprovable_site_is_surfaced_unsure_and_not_rewritten_by_default(
+        self, make_repo, call_tool
+    ):
+        repo = make_repo(CONSTRAINT_FIXTURE)
+        report = call_tool(
+            "rewrite",
+            {
+                "pattern": SAVE_PATTERN,
+                "goal": SAVE_GOAL,
+                "constraints": {"x": {"type": "models.Model"}},
+                "apply": True,
+                "root": str(repo),
+            },
+        )
+        site = sites_by_path(report)["tasks.py"]
+        assert site["certainty"] == "unsure"
+        assert site["included"] is False
+        assert report["unsure_count"] == 1
+        assert "record.persist()" in (repo / "handlers.py").read_text()
+        assert "cache.save()" in (repo / "handlers.py").read_text()
+        assert (repo / "tasks.py").read_text() == CONSTRAINT_FIXTURE["tasks.py"]
+
+    def test_name_constraint_narrows_to_references_of_that_symbol(
+        self, make_repo, call_tool
+    ):
+        repo = make_repo(
+            {
+                "helpers.py": (
+                    "def legacy(x):\n    return x\n\n\n"
+                    "def modern(x):\n    return x\n"
+                ),
+                "caller.py": (
+                    "from helpers import legacy, modern\n\n"
+                    "legacy(1)\n"
+                    "modern(2)\n"
+                ),
+            }
+        )
+        report = call_tool(
+            "rewrite",
+            {
+                "pattern": "${func}(${arg})",
+                "goal": "${func}(${arg}, migrated=True)",
+                "constraints": {"func": {"name": "helpers.legacy"}},
+                "root": str(repo),
+            },
+        )
+        snippets = {s["snippet"] for s in report["match_sites"] if s["included"]}
+        assert "legacy(1)" in snippets
+        assert "modern(2)" not in snippets
+
+    def test_object_constraint_pins_one_class_object(self, make_repo, call_tool):
+        repo = make_repo(
+            {
+                **CONSTRAINT_FIXTURE,
+                "factories.py": (
+                    "from models import Model, Audited\n\n"
+                    "a = Model()\n"
+                    "b = Audited()\n"
+                ),
+            }
+        )
+        report = call_tool(
+            "rewrite",
+            {
+                "pattern": "${cls}()",
+                "goal": "${cls}.create()",
+                "constraints": {"cls": {"object": "models.Model"}},
+                "root": str(repo),
+            },
+        )
+        included = [s for s in report["match_sites"] if s["included"]]
+        assert {s["snippet"] for s in included} == {"a = Model()", "record = Model()"}
+
+    def test_instance_constraint_admits_subclasses_where_type_does_not(
+        self, make_repo, call_tool
+    ):
+        fixture = {
+            **CONSTRAINT_FIXTURE,
+            "audit.py": (
+                "from models import Audited\n\n"
+                "trail = Audited()\n"
+                "trail.save()\n"
+            ),
+        }
+        repo = make_repo(fixture, name="instance_repo")
+        by_type = call_tool(
+            "rewrite",
+            {
+                "pattern": SAVE_PATTERN,
+                "goal": SAVE_GOAL,
+                "constraints": {"x": {"type": "models.Model"}},
+                "root": str(repo),
+            },
+        )
+        assert "audit.py" not in {
+            s["path"] for s in by_type["match_sites"] if s["included"]
+        }
+        by_instance = call_tool(
+            "rewrite",
+            {
+                "pattern": SAVE_PATTERN,
+                "goal": SAVE_GOAL,
+                "constraints": {"x": {"instance": "models.Model"}},
+                "root": str(repo),
+            },
+        )
+        trail = sites_by_path(by_instance)["audit.py"]
+        assert trail["certainty"] == "matched"
+        assert trail["included"] is True
+
+    def test_exact_constraint_matches_only_the_literal_name(
+        self, make_repo, call_tool
+    ):
+        repo = make_repo(CONSTRAINT_FIXTURE)
+        report = call_tool(
+            "rewrite",
+            {
+                "pattern": "${record}.save()",
+                "goal": "${record}.persist()",
+                "constraints": {"record": {"exact": True}},
+                "root": str(repo),
+            },
+        )
+        assert [s["snippet"] for s in report["match_sites"]] == ["record.save()"]
+
+    def test_unknown_constraint_key_is_a_structured_failure(
+        self, make_repo, call_tool
+    ):
+        repo = make_repo(CONSTRAINT_FIXTURE)
+        report = call_tool(
+            "rewrite",
+            {
+                "pattern": SAVE_PATTERN,
+                "goal": SAVE_GOAL,
+                "constraints": {"x": {"kind": "models.Model"}},
+                "root": str(repo),
+            },
+        )
+        assert report["status"] == "failure"
+        assert report["failure"]["kind"] == "invalid-match-constraint"
+
+    def test_constraint_on_an_unknown_wildcard_is_a_structured_failure(
+        self, make_repo, call_tool
+    ):
+        repo = make_repo(CONSTRAINT_FIXTURE)
+        report = call_tool(
+            "rewrite",
+            {
+                "pattern": SAVE_PATTERN,
+                "goal": SAVE_GOAL,
+                "constraints": {"y": {"type": "models.Model"}},
+                "root": str(repo),
+            },
+        )
+        assert report["status"] == "failure"
+        assert report["failure"]["kind"] == "invalid-match-constraint"
+        assert "y" in report["failure"]["reason"]
+
+    def test_two_narrowing_keys_on_one_wildcard_are_refused_not_silently_ranked(
+        self, make_repo, call_tool
+    ):
+        repo = make_repo(CONSTRAINT_FIXTURE)
+        report = call_tool(
+            "rewrite",
+            {
+                "pattern": SAVE_PATTERN,
+                "goal": SAVE_GOAL,
+                "constraints": {
+                    "x": {"type": "models.Model", "name": "handlers.record"}
+                },
+                "root": str(repo),
+            },
+        )
+        assert report["status"] == "failure"
+        assert report["failure"]["kind"] == "invalid-match-constraint"
+
+    def test_the_published_surface_never_says_proven(self, make_repo, call_tool):
+        repo = make_repo(CONSTRAINT_FIXTURE)
+        report = call_tool(
+            "rewrite",
+            {
+                "pattern": SAVE_PATTERN,
+                "goal": SAVE_GOAL,
+                "constraints": {"x": {"type": "models.Model"}},
+                "root": str(repo),
+            },
+        )
+        assert "proven" not in json.dumps(report)
+
+
+class TestUnsureKnob:
+    def test_unsure_includes_the_unprovable_site_and_keeps_it_flagged(
+        self, make_repo, call_tool
+    ):
+        repo = make_repo(CONSTRAINT_FIXTURE)
+        report = call_tool(
+            "rewrite",
+            {
+                "pattern": SAVE_PATTERN,
+                "goal": SAVE_GOAL,
+                "constraints": {"x": {"type": "models.Model", "unsure": True}},
+                "apply": True,
+                "root": str(repo),
+            },
+        )
+        site = sites_by_path(report)["tasks.py"]
+        assert site["certainty"] == "unsure"
+        assert site["included"] is True
+        assert (repo / "tasks.py").read_text() == (
+            "def touch(thing):\n    thing.persist()\n"
+        )
+        assert "cache.save()" in (repo / "handlers.py").read_text()
+
+    def test_unsure_is_per_wildcard_not_global(self, make_repo, call_tool):
+        repo = make_repo(
+            {
+                "models.py": CONSTRAINT_FIXTURE["models.py"],
+                "sync.py": (
+                    "from models import Model\n"
+                    "\n"
+                    "known = Model()\n"
+                    "\n"
+                    "\n"
+                    "def relay(source, target):\n"
+                    "    source.copy_to(known)\n"
+                    "    source.copy_to(target)\n"
+                ),
+            }
+        )
+        report = call_tool(
+            "rewrite",
+            {
+                "pattern": "${src}.copy_to(${dst})",
+                "goal": "${dst}.copy_from(${src})",
+                "constraints": {
+                    "src": {"type": "models.Model", "unsure": True},
+                    "dst": {"type": "models.Model"},
+                },
+                "apply": True,
+                "root": str(repo),
+            },
+        )
+        text = (repo / "sync.py").read_text()
+        # src is unprovable but pre-adjudicated; dst stays strict, so only
+        # the call whose target is provably a Model is rewritten.
+        assert "known.copy_from(source)" in text
+        assert "source.copy_to(target)" in text
+        sites = report["match_sites"]
+        assert len(sites) == 2
+        included = [s for s in sites if s["included"]]
+        assert len(included) == 1
+        assert all(s["certainty"] == "unsure" for s in sites)
+
+    def test_dry_and_live_runs_agree_on_what_the_knob_includes(
+        self, make_repo, call_tool
+    ):
+        repo = make_repo(CONSTRAINT_FIXTURE)
+        arguments = {
+            "pattern": SAVE_PATTERN,
+            "goal": SAVE_GOAL,
+            "constraints": {"x": {"type": "models.Model", "unsure": True}},
+            "root": str(repo),
+        }
+        dry = call_tool("rewrite", arguments)
+        live = call_tool("rewrite", {**arguments, "apply": True})
+        assert dry["match_sites"] == live["match_sites"]
+        assert dry["blast_radius"] == live["blast_radius"]
 
 
 class TestSearchScope:

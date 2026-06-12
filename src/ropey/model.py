@@ -241,6 +241,7 @@ class FailureKind:
     INVALID_SELECTION = "invalid-selection"
     INVALID_PATTERN = "invalid-pattern"
     INVALID_GOAL = "invalid-goal"
+    INVALID_MATCH_CONSTRAINT = "invalid-match-constraint"
     UNPARSABLE_FILE = "unparsable-file"
     INVALID_ARGUMENT = "invalid-argument"
     INTERNAL_ERROR = "internal-error"

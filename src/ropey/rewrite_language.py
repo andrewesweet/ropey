@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import ast
 import textwrap
+from typing import Any, cast
 
 from rope.refactor.similarfinder import CodeTemplate
 
@@ -51,6 +52,101 @@ def validate_templates(pattern: str, goal: str) -> frozenset[str]:
     _ensure_pattern_parses(pattern, pattern_wildcards)
     _ensure_goal_parses(goal, goal_wildcards)
     return frozenset(pattern_wildcards)
+
+
+_SYMBOL_KEYS = ("name", "type", "object", "instance")
+_FLAG_KEYS = ("exact", "unsure")
+_CONSTRAINT_KEYS = _SYMBOL_KEYS + _FLAG_KEYS
+
+ConstraintArgs = dict[str, dict[str, str | bool]]
+
+
+def validate_constraints(
+    constraints: dict[str, dict[str, object]] | None,
+    wildcards: frozenset[str],
+) -> ConstraintArgs:
+    """Check the Match Constraints; return them as per-Wildcard matcher args.
+
+    Published keys: ``name``/``type``/``object``/``instance`` narrow by a
+    symbol's dotted path (at most one per Wildcard — they are alternative
+    checks, and silently ranking them would hide which one applied);
+    ``exact`` narrows to the Wildcard's literal name; ``unsure`` widens to
+    sites where the symbol check cannot be established.
+    """
+    args: ConstraintArgs = {}
+    for wildcard, spec in (constraints or {}).items():
+        if wildcard not in wildcards:
+            raise StructuredFailure(
+                FailureKind.INVALID_MATCH_CONSTRAINT,
+                f"The Match Constraint on ${{{wildcard}}} names no Pattern "
+                f"Wildcard; the Pattern binds {_wildcard_list(set(wildcards))}.",
+            )
+        args[wildcard] = _validated_spec(wildcard, spec)
+    return args
+
+
+def _validated_spec(wildcard: str, spec: object) -> dict[str, str | bool]:
+    if not isinstance(spec, dict):
+        raise StructuredFailure(
+            FailureKind.INVALID_MATCH_CONSTRAINT,
+            f"The Match Constraint on ${{{wildcard}}} is not an object; pass "
+            'e.g. {"type": "myapp.models.User"} or {"exact": true}.',
+        )
+    validated: dict[str, str | bool] = {}
+    for key, value in cast(dict[str, Any], spec).items():
+        if key not in _CONSTRAINT_KEYS:
+            raise StructuredFailure(
+                FailureKind.INVALID_MATCH_CONSTRAINT,
+                f"Unknown Match Constraint key {key!r} on ${{{wildcard}}}; "
+                f"the keys are {', '.join(_CONSTRAINT_KEYS)}.",
+            )
+        if key in _SYMBOL_KEYS:
+            if not isinstance(value, str) or not value:
+                raise StructuredFailure(
+                    FailureKind.INVALID_MATCH_CONSTRAINT,
+                    f"The {key} Match Constraint on ${{{wildcard}}} needs a "
+                    "symbol's dotted path (e.g. myapp.models.User); got "
+                    f"{value!r}.",
+                )
+            validated[key] = value
+        else:
+            if not isinstance(value, bool):
+                raise StructuredFailure(
+                    FailureKind.INVALID_MATCH_CONSTRAINT,
+                    f"The {key} Match Constraint on ${{{wildcard}}} is a "
+                    f"flag; pass true or false, got {value!r}.",
+                )
+            if value:
+                validated[key] = True
+    symbol_keys = [key for key in _SYMBOL_KEYS if key in validated]
+    if len(symbol_keys) > 1:
+        raise StructuredFailure(
+            FailureKind.INVALID_MATCH_CONSTRAINT,
+            f"${{{wildcard}}} carries {' and '.join(symbol_keys)} together; "
+            "name, type, object and instance are alternative checks — "
+            "choose one per Wildcard.",
+        )
+    return validated
+
+
+def narrowing_args(args: ConstraintArgs) -> ConstraintArgs:
+    """The args with every ``unsure`` widening removed: the certainty baseline."""
+    return {
+        wildcard: {key: value for key, value in spec.items() if key != "unsure"}
+        for wildcard, spec in args.items()
+    }
+
+
+def widening_args(args: ConstraintArgs) -> ConstraintArgs:
+    """The args with ``unsure`` set wherever a symbol check could fail to be
+    established: the full candidate set, certain and unsure alike."""
+    widened: ConstraintArgs = {}
+    for wildcard, spec in args.items():
+        if any(key in spec for key in _SYMBOL_KEYS):
+            widened[wildcard] = {**spec, "unsure": True}
+        else:
+            widened[wildcard] = dict(spec)
+    return widened
 
 
 def _wildcard_names(template: str, kind: str, label: str) -> set[str]:
