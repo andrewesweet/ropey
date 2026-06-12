@@ -63,11 +63,13 @@ def _register_rename_tool(mcp: FastMCP, runner: RefactoringRunner) -> None:
             "to write. Supply expected_symbol (the identifier you believe "
             "is at the Position) when edits may have happened since your "
             "LSP answer — a mismatch fails safely instead of renaming the "
-            "wrong code. Prefer a clean git working tree before applying; "
-            "use `git diff` afterwards for exact text. Occurrences rope "
-            "cannot prove certain are reported as uncertain_occurrences "
-            "for you to adjudicate, never silently changed. Not for "
-            "navigation or formatting."
+            "wrong code. Prefer a clean git working tree before applying, "
+            "since git is the reversal mechanism; use `git diff` afterwards "
+            "for exact text. Occurrences that cannot be proven to refer to "
+            "this symbol are reported as uncertain_occurrences for you to "
+            "adjudicate, never silently changed. Keep navigation and "
+            "reading with your LSP, and formatting with black/ruff — this "
+            "tool only changes code structure."
         ),
     )
     def rename(
@@ -107,10 +109,12 @@ def _register_catalogue(mcp: FastMCP, runner: RefactoringRunner) -> None:
             "optionally new_name); a whole module or package moves into a "
             "package when you omit line/character entirely (pass "
             "destination: the package directory). Coordinates are 0-based "
-            "LSP line/character (UTF-16 units). Defaults to a Dry Run "
-            "preview; set apply=true to write. Prefer a clean git tree "
-            "before applying. Moved resources report old_path; new files "
-            "report created."
+            "LSP line/character (UTF-16 units), exactly as your LSP "
+            "returns them — locate the symbol with the LSP first. "
+            "Defaults to a Dry Run preview; set apply=true to write. "
+            "Prefer a clean git tree before applying, since git is the "
+            "reversal mechanism. Moved resources report old_path; new "
+            "files report created."
         ),
     )
     def move(
@@ -149,7 +153,8 @@ def _register_catalogue(mcp: FastMCP, runner: RefactoringRunner) -> None:
             "complete expression. Options: replace_similar replaces other "
             "occurrences of the same pattern; to_global_scope extracts to "
             "module level; method_kind makes a classmethod or staticmethod. "
-            "Defaults to a Dry Run preview; set apply=true to write."
+            "Defaults to a Dry Run preview; set apply=true to write. Read "
+            "the code with your LSP first; leave formatting to black/ruff."
         ),
     )
     def extract_method(
@@ -190,7 +195,9 @@ def _register_catalogue(mcp: FastMCP, runner: RefactoringRunner) -> None:
             "0-based, UTF-16 units) covering exactly one expression. "
             "replace_similar also substitutes other occurrences of the same "
             "expression; to_global_scope creates the variable at module "
-            "level. Defaults to a Dry Run preview; set apply=true to write."
+            "level. Defaults to a Dry Run preview; set apply=true to "
+            "write. Read the code with your LSP first; leave formatting "
+            "to black/ruff."
         ),
     )
     def extract_variable(
@@ -232,7 +239,9 @@ def _register_catalogue(mcp: FastMCP, runner: RefactoringRunner) -> None:
             "the Position. Parameters: the default value is written into "
             "call sites that omit it. Defaults to a Dry Run preview; set "
             "apply=true to write. Supply expected_symbol when edits may "
-            "have intervened since your LSP answer."
+            "have intervened since your LSP answer, so a stale Position "
+            "fails safely instead of inlining the wrong thing. Locate the "
+            "definition with your LSP first; this tool only changes code."
         ),
     )
     def inline(
@@ -273,8 +282,9 @@ def _register_catalogue(mcp: FastMCP, runner: RefactoringRunner) -> None:
             "covering every parameter]}. For methods, parameter lists "
             "include self (index 0). across_class_hierarchy applies the "
             "change to matching overrides. Defaults to a Dry Run preview; "
-            "set apply=true to write. Uncertain call sites are reported, "
-            "never silently edited."
+            "set apply=true to write. Uncertain call sites are reported "
+            "as uncertain_occurrences, never silently edited. Locate the "
+            "function with your LSP first; this tool only changes code."
         ),
     )
     def change_signature(
@@ -305,9 +315,10 @@ def _register_catalogue(mcp: FastMCP, runner: RefactoringRunner) -> None:
             "Convert a Python module file into a package: creates a "
             "directory of the module's name and moves the module to its "
             "__init__.py, rewriting relative imports to absolute. Pass the "
-            "module's file path alone; no Position. Defaults to a Dry Run "
-            "preview (created and moved entries appear in the Blast "
-            "Radius); set apply=true to write."
+            "module's file path alone; no Position needed. Defaults to a "
+            "Dry Run preview (created and moved entries appear in the "
+            "Blast Radius); set apply=true to write. Use your LSP for "
+            "navigation and reading; this tool only restructures."
         ),
     )
     def module_to_package(
