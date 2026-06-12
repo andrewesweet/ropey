@@ -162,7 +162,8 @@ class RewriteReport:
         total = len(self.match_sites)
         if total == 0:
             return "0 Match Sites — the Pattern fired nowhere in the Search Scope."
-        summary = f"{total} Match Sites ({self._unsure_count()} unsure)"
+        plural = "" if total == 1 else "s"
+        summary = f"{total} Match Site{plural} ({self._unsure_count()} unsure)"
         excluded_unsure = self._excluded(MatchCertainty.UNSURE)
         if excluded_unsure:
             summary += (
