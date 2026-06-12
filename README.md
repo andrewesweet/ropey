@@ -23,11 +23,21 @@ LSP already returned, and ropey performs the behaviour-preserving
 transformation across the whole project: rename, move, extract, inline,
 change signature, organise imports, and so on. One sibling tool, `rewrite`,
 takes a pattern→goal transformation for structural changes none of the
-refactorings express. It is addressed by a code template rather than a
-coordinate, and is explicitly *not* behaviour-preserving (see below).
+refactorings express, addressed by a code template rather than a
+coordinate (see the safety contract).
 
 ## The safety contract
 
+- **Behaviour is preserved, with one exception.** Every refactoring
+  alters the structure of your code without changing what it does, and
+  rope proves each transformation safe before ropey writes it. `rewrite`
+  is the exception: it makes no behaviour-preservation claim. The agent
+  asserts that pattern and goal are equivalent, and the tool guarantees
+  only that it rewrites exactly the matches it reports. In exchange it
+  surfaces *every* Match Site (file + range, flagged `matched` or
+  `unsure`) for the agent to audit, leaves unprovable sites un-rewritten
+  unless explicitly opted in, and refuses any rewrite that would produce
+  unparsable Python. Both preview and apply mode enforce that refusal.
 - **Dry Run by default.** Every tool takes an `apply` flag. With
   `apply=false` (the default) the full consequence is computed and reported
   but nothing is written. `apply=true` performs the same change for real.
@@ -41,14 +51,6 @@ coordinate, and is explicitly *not* behaviour-preserving (see below).
   applies only the certain occurrences and reports every uncertain one as a
   flagged location for the agent to adjudicate. Nothing is silently included
   or silently dropped.
-- **The Rewrite is agent-asserted, and says so.** `rewrite` is the one
-  tool that makes no behaviour-preservation claim. The agent asserts that
-  pattern and goal are equivalent, and the tool guarantees only that it
-  rewrites exactly the matches it reports. In exchange it surfaces *every*
-  Match Site (file + range, flagged `matched` or `unsure`) for the agent
-  to audit, leaves unprovable sites un-rewritten unless explicitly opted
-  in, and refuses any rewrite that would produce unparsable Python, in
-  preview *and* apply mode alike.
 - **Freshness is self-established.** Before every refactoring the server
   re-checks the source on disk, so edits from any writer are reflected,
   whether they came from the agent, a human editor, `git checkout`, or a
@@ -126,17 +128,15 @@ Or run it directly: `uvx --from git+https://github.com/andrewesweet/ropey ropey`
 | `method_object` | Convert a method into a method object (a class whose `__call__` holds the body) to decompose a complex method |
 | `local_to_field` | Promote a method-local variable to an instance field (`self.<name>`) |
 | `use_function` | Replace code that duplicates a function's body with calls to it, project-wide |
-| `rewrite` | Pattern→goal rewrite of every matching site (`${obj}.get_attribute(${key})` → `${obj}[${key}]`), with per-wildcard match constraints, certainty-flagged Match Sites, and a syntax guard. *Not* behaviour-preserving; the agent owns the equivalence |
+| `rewrite` | Pattern→goal rewrite of every matching site (`${obj}.get_attribute(${key})` → `${obj}[${key}]`), with per-wildcard match constraints, certainty-flagged Match Sites, and a syntax guard |
 
 Targets are addressed with LSP coordinates (0-based line/character, UTF-16
-units), exactly what an LSP returns; byte offsets never appear. Point
-refactorings accept an optional `expected_symbol` so a stale position fails
-loudly instead of refactoring the wrong code. The exception is `rewrite`,
-which is addressed by a *pattern* (Python source with `${wildcard}`
-placeholders) instead of a coordinate, and reports its Match Sites back as
-LSP ranges. ty finds and reads, ropey changes, and for the one tool that
-cannot prove equivalence, ropey shows every site it touched so the agent
-(and `git diff`) can verify.
+units), the same coordinates an LSP returns; byte offsets never appear.
+Point refactorings accept an optional `expected_symbol` so a stale position
+fails loudly instead of refactoring the wrong code. The exception is
+`rewrite`, which is addressed by a *pattern* (Python source with
+`${wildcard}` placeholders) instead of a coordinate, and reports its Match
+Sites back as LSP ranges. ty finds and reads; ropey changes.
 
 ## Development
 
