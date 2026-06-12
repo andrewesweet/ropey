@@ -410,7 +410,8 @@ def _register_tier_2_and_3(mcp: FastMCP, runner: RefactoringRunner) -> None:
             "set apply=true to write. Accesses that cannot be proven to be "
             "this attribute are reported as uncertain_occurrences, never "
             "silently rewritten. Supply expected_symbol when edits may "
-            "have intervened since your LSP answer."
+            "have intervened since your LSP answer. Locate the attribute "
+            "with your LSP first; this tool only changes code."
         ),
     )
     def encapsulate_field(
@@ -445,7 +446,9 @@ def _register_tier_2_and_3(mcp: FastMCP, runner: RefactoringRunner) -> None:
             "global_factory=true creates a module-level function instead. "
             "Existing constructor calls across the project are rewritten "
             "to the factory. Defaults to a Dry Run preview; set apply=true "
-            "to write. Locate the class with your LSP first; this tool "
+            "to write. Supply expected_symbol when edits may have "
+            "intervened since your LSP answer, so a stale Position fails "
+            "safely. Locate the class with your LSP first; this tool "
             "only changes code."
         ),
     )
@@ -479,7 +482,9 @@ def _register_tier_2_and_3(mcp: FastMCP, runner: RefactoringRunner) -> None:
             "delegating to it — a stepping stone for decomposing a complex "
             "method. Point at the method name (0-based LSP line/character, "
             "UTF-16 units) and name the new class. Defaults to a Dry Run "
-            "preview; set apply=true to write. Read the method with your "
+            "preview; set apply=true to write. Supply expected_symbol "
+            "when edits may have intervened since your LSP answer, so a "
+            "stale Position fails safely. Read the method with your "
             "LSP first; this tool only changes code."
         ),
     )
@@ -510,7 +515,9 @@ def _register_tier_2_and_3(mcp: FastMCP, runner: RefactoringRunner) -> None:
             "field: the local becomes self.<name> everywhere in the "
             "class. Point at the local variable's name (0-based LSP "
             "line/character, UTF-16 units). Defaults to a Dry Run "
-            "preview; set apply=true to write. Locate the variable with "
+            "preview; set apply=true to write. Supply expected_symbol "
+            "when edits may have intervened since your LSP answer, so a "
+            "stale Position fails safely. Locate the variable with "
             "your LSP first; this tool only changes code."
         ),
     )
@@ -540,9 +547,12 @@ def _register_tier_2_and_3(mcp: FastMCP, runner: RefactoringRunner) -> None:
             "of a module-level function (0-based LSP line/character, "
             "UTF-16 units); statements matching its body pattern are "
             "rewritten into calls. Defaults to a Dry Run preview; set "
-            "apply=true to write. References that cannot be proven are "
-            "reported as uncertain_occurrences. Locate the function with "
-            "your LSP first; this tool only changes code."
+            "apply=true to write. Sites that cannot be proven to match "
+            "are reported as uncertain_occurrences for you to adjudicate, "
+            "never silently rewritten. Supply expected_symbol when edits "
+            "may have intervened since your LSP answer, so a stale "
+            "Position fails safely. Locate the function with your LSP "
+            "first; this tool only changes code."
         ),
     )
     def use_function(

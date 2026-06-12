@@ -62,12 +62,18 @@ Every tool description must:
 
 ## Conformance
 
-All eight registered tools (rename, move, module_to_package,
+All fourteen registered tools (rename, move, module_to_package,
 extract_method, extract_variable, inline, change_signature,
-organize_imports) were audited point-by-point against D1–D8 on
-2026-06-12; `tests/test_tool_descriptions.py` enforces the mechanical
-subset (calibrated language, apply documented, routing present,
-no internal vocabulary) so regressions fail CI rather than review.
+organize_imports, introduce_parameter, introduce_factory,
+encapsulate_field, method_object, local_to_field, use_function) were
+audited point-by-point against D1–D8 on 2026-06-12; the Tier 2/3 audit
+found and fixed five judgement-level gaps (a missing routing sentence
+on encapsulate_field; `expected_symbol` undocumented on
+introduce_factory, method_object, local_to_field, use_function; an
+unmotivated uncertain_occurrences mention on use_function).
+`tests/test_tool_descriptions.py` enforces the mechanical subset
+(calibrated language, apply documented, routing present, no internal
+vocabulary) so regressions fail CI rather than review.
 
 | Check | Enforced by |
 | ----- | ----------- |
