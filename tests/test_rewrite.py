@@ -644,6 +644,105 @@ class TestSearchScope:
         assert (repo / "generated/gen.py").read_text() == generated
 
 
+class TestNonAsciiMatchSites:
+    # The emoji is astral (2 UTF-16 units per code point); the CJK
+    # identifiers are BMP. Characters before the match on its line:
+    # 'banner = "<2x emoji>"; <CJK> = ' -> 17 + 4 = 21 UTF-16 units.
+    UNICODE_LINE = 'banner = "\U0001f40d\U0001f40d"; 値 = conf.get_attribute("名前")'
+
+    def fixture(self):
+        return {"unicode.py": f"{self.UNICODE_LINE}\n"}
+
+    def assert_utf16_range(self, report: dict) -> None:
+        site = site_for(report, "unicode.py")
+        assert site["range"]["start"] == {"line": 0, "character": 21}
+        assert site["range"]["end"] == {"line": 0, "character": 45}
+
+    def test_a_match_after_emoji_and_cjk_reports_a_correct_utf16_range(
+        self, make_repo, call_tool
+    ):
+        repo = make_repo(self.fixture())
+        report = call_tool(
+            "rewrite", {"pattern": PATTERN, "goal": GOAL, "root": str(repo)}
+        )
+        self.assert_utf16_range(report)
+
+    def test_live_run_ranges_address_the_pre_apply_text(
+        self, make_repo, call_tool
+    ):
+        repo = make_repo(self.fixture())
+        report = call_tool(
+            "rewrite",
+            {"pattern": PATTERN, "goal": GOAL, "apply": True, "root": str(repo)},
+        )
+        self.assert_utf16_range(report)
+        assert 'conf["名前"]' in (repo / "unicode.py").read_text()
+
+
+def truncation_fixture() -> dict[str, str]:
+    """125 Match Sites under type=Model: 110 provable, 15 unsure."""
+    certain = "\n".join("record.save()" for _ in range(110))
+    unsure = "\n".join("    thing.save()" for _ in range(15))
+    return {
+        "models.py": CONSTRAINT_FIXTURE["models.py"],
+        "bulk.py": f"from models import Model\n\nrecord = Model()\n{certain}\n",
+        "dynamic.py": f"def churn(thing):\n{unsure}\n",
+    }
+
+
+class TestLoudTruncation:
+    ARGUMENTS = {
+        "pattern": SAVE_PATTERN,
+        "goal": SAVE_GOAL,
+        "constraints": {"x": {"type": "models.Model"}},
+    }
+
+    def test_an_over_cap_match_set_is_truncated_loudly(self, make_repo, call_tool):
+        repo = make_repo(truncation_fixture())
+        report = call_tool("rewrite", {**self.ARGUMENTS, "root": str(repo)})
+        assert report["match_site_count"] == 125
+        assert report["unsure_count"] == 15
+        assert len(report["match_sites"]) == 100
+        assert "showing 100 of 125" in report["truncation"]
+
+    def test_unsure_sites_are_listed_first_when_truncated(
+        self, make_repo, call_tool
+    ):
+        repo = make_repo(truncation_fixture())
+        report = call_tool("rewrite", {**self.ARGUMENTS, "root": str(repo)})
+        leading = report["match_sites"][:15]
+        assert all(site["certainty"] == "unsure" for site in leading)
+        assert all(
+            site["certainty"] == "matched" for site in report["match_sites"][15:]
+        )
+
+    def test_blast_radius_is_complete_despite_truncation(
+        self, make_repo, call_tool
+    ):
+        repo = make_repo(truncation_fixture())
+        report = call_tool("rewrite", {**self.ARGUMENTS, "root": str(repo)})
+        assert blast_paths(report) == {"bulk.py"}
+
+    def test_live_run_over_cap_applies_every_match_not_just_the_shown_ones(
+        self, make_repo, call_tool
+    ):
+        repo = make_repo(truncation_fixture())
+        call_tool("rewrite", {**self.ARGUMENTS, "apply": True, "root": str(repo)})
+        bulk = (repo / "bulk.py").read_text()
+        assert bulk.count("record.persist()") == 110
+        assert "record.save()" not in bulk
+
+    def test_under_cap_enumeration_is_complete_and_unflagged(
+        self, make_repo, call_tool
+    ):
+        repo = make_repo(GET_ATTRIBUTE_FIXTURE)
+        report = call_tool(
+            "rewrite", {"pattern": PATTERN, "goal": GOAL, "root": str(repo)}
+        )
+        assert len(report["match_sites"]) == report["match_site_count"]
+        assert "truncation" not in report
+
+
 class TestOperability:
     def test_per_call_record_includes_match_scan_ms(
         self, make_repo, call_tool, caplog
