@@ -120,8 +120,12 @@ Or run it directly: `uvx --from git+https://github.com/andrewesweet/ropey ropey`
 | `inline` | Inline a method, variable, or parameter (kind auto-detected) |
 | `change_signature` | Add / remove / reorder parameters with every call site updated |
 | `organize_imports` | Sort, dedupe, expand star-imports, relative→absolute |
-| `introduce_parameter` / `encapsulate_field` | Tier 2 |
-| `introduce_factory` / `method_object` / `local_to_field` / `use_function` | Tier 3 |
+| `introduce_parameter` | Turn a selected expression into a new parameter, defaulting to that expression, with call sites updated |
+| `encapsulate_field` | Wrap a class attribute behind getter/setter, rewriting reads and writes project-wide |
+| `introduce_factory` | Add a factory (static method or module function) for a class and route instantiations through it |
+| `method_object` | Convert a method into a method object (a class whose `__call__` holds the body) for decomposing a complex method |
+| `local_to_field` | Promote a method-local variable to an instance field (`self.<name>`) |
+| `use_function` | Replace code duplicating a function's body with calls to it, project-wide |
 | `rewrite` | Pattern→goal rewrite of every matching site (`${obj}.get_attribute(${key})` → `${obj}[${key}]`), with per-wildcard match constraints, certainty-flagged Match Sites, and a syntax guard. *Not* behaviour-preserving; the agent owns the equivalence |
 
 Targets are addressed with LSP coordinates (0-based line/character, UTF-16
