@@ -20,6 +20,7 @@ from pathlib import Path
 from ropey.model import Position
 from ropey.project_provider import ProjectProvider
 from ropey.refactoring_runner import RefactoringRunner
+from ropey.rewrite_runner import RewriteRunner
 
 logging.basicConfig(stream=sys.stderr, level=logging.INFO, format="%(message)s")
 
@@ -54,6 +55,33 @@ def measure(label: str, module_count: int) -> None:
         print(f"peak RSS: {peak_kb / 1024:.0f} MB")
 
 
+def measure_rewrite(label: str, module_count: int) -> None:
+    """The Rewrite's match scan: unconstrained, and with a Match Constraint
+    (which adds the extra certainty passes)."""
+    import threading
+
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp) / "fixture"
+        root.mkdir()
+        build_fixture(root, module_count)
+        rewriter = RewriteRunner(ProjectProvider(), threading.Lock())
+        print(f"\n=== rewrite {label}: {module_count + 2} files ===")
+        for scenario, constraints in (
+            ("unconstrained", None),
+            ("name-constrained", {"a": {"name": "pkg.core.anchor"}}),
+        ):
+            report = rewriter.rewrite(
+                pattern="${a} + ${i}",
+                goal="${i} + ${a}",
+                constraints=constraints,
+                apply=False,
+                root=str(root),
+            )
+            print(f"{scenario}: {len(report.match_sites)} match sites")
+
+
 if __name__ == "__main__":
     measure("small", 50)
     measure("large", 2000)
+    measure_rewrite("small", 50)
+    measure_rewrite("large", 2000)

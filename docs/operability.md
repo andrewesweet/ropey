@@ -29,6 +29,22 @@ order-of-magnitude expectations (cold ≈ hundreds of files/second parsed —
 observed ~3 300 files/s; warm validate ≈ 10⁴–10⁵ stats/s — observed
 ~10⁵/s; memory tens of MB). No revision to the PRD envelope is needed.
 
+### Rewrite match scan (PRD 0002)
+
+The `rewrite` tool's record carries `match_scan_ms` (event
+`rewrite-call`). The scan cost scales with Search Scope size, not match
+count; a Match Constraint adds the extra certainty passes. Measured
+2026-06-12, same rig, warm Project, every module matching:
+
+| Scope files | Unconstrained | Name-constrained |
+| ----------- | ------------- | ---------------- |
+| 52          | 11 ms         | 25 ms            |
+| 2 002       | 496 ms        | 947 ms           |
+
+Against PRD 0002's envelope ("roughly seconds on a 1k-file project"):
+observed under a second per 1 000 files even with constraints. No
+revision needed.
+
 ## Phase 4 hook trigger
 
 The hook accelerator triggers only if p50 `validate()` exceeds ~250 ms on

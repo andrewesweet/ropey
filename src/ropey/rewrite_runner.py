@@ -14,6 +14,7 @@ or outputs; Pattern, Goal, and Wildcard cross verbatim (Conformist).
 from __future__ import annotations
 
 import threading
+from typing import Any
 
 from rope.refactor.restructure import Restructure
 
@@ -43,7 +44,7 @@ class RewriteRunner:
         *,
         pattern: str,
         goal: str,
-        constraints: dict[str, dict[str, object]] | None = None,
+        constraints: dict[str, dict[str, Any]] | None = None,
         imports: list[str] | None = None,
         apply: bool,
         root: str | None = None,
