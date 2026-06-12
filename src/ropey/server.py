@@ -32,6 +32,7 @@ def create_server() -> FastMCP:
     mcp = FastMCP("ropey", instructions=SERVER_INSTRUCTIONS)
     _register_rename_tool(mcp, runner)
     _register_catalogue(mcp, runner)
+    _register_tier_2_and_3(mcp, runner)
     return mcp
 
 
@@ -355,6 +356,210 @@ def _register_catalogue(mcp: FastMCP, runner: RefactoringRunner) -> None:
         return _dispatch(
             lambda: runner.organize_imports(
                 file=file, mode=mode, apply=apply, root=root
+            )
+        )
+
+
+def _register_tier_2_and_3(mcp: FastMCP, runner: RefactoringRunner) -> None:
+    @mcp.tool(
+        name="introduce_parameter",
+        description=(
+            "Turn a value used inside a function into a new parameter, "
+            "with the original expression becoming the parameter's "
+            "default. Select the expression — a name or attribute access "
+            "such as a module constant or self.<attr> — with a Range "
+            "(start_line/start_character to end_line/end_character, "
+            "0-based, character in UTF-16 units) inside the function body "
+            "and give the parameter a name. Defaults to a Dry Run preview; "
+            "set apply=true to write. Read the code with your LSP first; "
+            "this tool only changes code."
+        ),
+    )
+    def introduce_parameter(
+        file: str,
+        start_line: int,
+        start_character: int,
+        end_line: int,
+        end_character: int,
+        parameter_name: str,
+        apply: bool = False,
+        root: str | None = None,
+    ) -> dict[str, Any]:
+        return _dispatch(
+            lambda: runner.introduce_parameter(
+                file=file,
+                selection=Range(
+                    Position(start_line, start_character),
+                    Position(end_line, end_character),
+                ),
+                parameter_name=parameter_name,
+                apply=apply,
+                root=root,
+            )
+        )
+
+    @mcp.tool(
+        name="encapsulate_field",
+        description=(
+            "Encapsulate a class attribute behind getter/setter methods, "
+            "rewriting reads to the getter and writes to the setter across "
+            "the project. Point at the attribute name (0-based LSP "
+            "line/character, UTF-16 units), exactly as your LSP returns "
+            "it. getter_name and setter_name override the default "
+            "get_<field>/set_<field> names. Defaults to a Dry Run preview; "
+            "set apply=true to write. Accesses that cannot be proven to be "
+            "this attribute are reported as uncertain_occurrences, never "
+            "silently rewritten. Supply expected_symbol when edits may "
+            "have intervened since your LSP answer."
+        ),
+    )
+    def encapsulate_field(
+        file: str,
+        line: int,
+        character: int,
+        apply: bool = False,
+        root: str | None = None,
+        expected_symbol: str | None = None,
+        getter_name: str | None = None,
+        setter_name: str | None = None,
+    ) -> dict[str, Any]:
+        return _dispatch(
+            lambda: runner.encapsulate_field(
+                file=file,
+                position=Position(line, character),
+                apply=apply,
+                root=root,
+                expected_symbol=expected_symbol,
+                getter_name=getter_name,
+                setter_name=setter_name,
+            )
+        )
+
+    @mcp.tool(
+        name="introduce_factory",
+        description=(
+            "Introduce a factory for a class and route instantiations "
+            "through it. Point at the class name (0-based LSP "
+            "line/character, UTF-16 units). By default the factory is a "
+            "static method named factory_name on the class; "
+            "global_factory=true creates a module-level function instead. "
+            "Existing constructor calls across the project are rewritten "
+            "to the factory. Defaults to a Dry Run preview; set apply=true "
+            "to write. Locate the class with your LSP first; this tool "
+            "only changes code."
+        ),
+    )
+    def introduce_factory(
+        file: str,
+        line: int,
+        character: int,
+        factory_name: str,
+        apply: bool = False,
+        root: str | None = None,
+        expected_symbol: str | None = None,
+        global_factory: bool = False,
+    ) -> dict[str, Any]:
+        return _dispatch(
+            lambda: runner.introduce_factory(
+                file=file,
+                position=Position(line, character),
+                factory_name=factory_name,
+                apply=apply,
+                root=root,
+                expected_symbol=expected_symbol,
+                global_factory=global_factory,
+            )
+        )
+
+    @mcp.tool(
+        name="method_object",
+        description=(
+            "Convert a method into a method object: a new class whose "
+            "__call__ holds the method body, with the original method "
+            "delegating to it — a stepping stone for decomposing a complex "
+            "method. Point at the method name (0-based LSP line/character, "
+            "UTF-16 units) and name the new class. Defaults to a Dry Run "
+            "preview; set apply=true to write. Read the method with your "
+            "LSP first; this tool only changes code."
+        ),
+    )
+    def method_object(
+        file: str,
+        line: int,
+        character: int,
+        class_name: str,
+        apply: bool = False,
+        root: str | None = None,
+        expected_symbol: str | None = None,
+    ) -> dict[str, Any]:
+        return _dispatch(
+            lambda: runner.method_object(
+                file=file,
+                position=Position(line, character),
+                class_name=class_name,
+                apply=apply,
+                root=root,
+                expected_symbol=expected_symbol,
+            )
+        )
+
+    @mcp.tool(
+        name="local_to_field",
+        description=(
+            "Promote a local variable inside a method to an instance "
+            "field: the local becomes self.<name> everywhere in the "
+            "class. Point at the local variable's name (0-based LSP "
+            "line/character, UTF-16 units). Defaults to a Dry Run "
+            "preview; set apply=true to write. Locate the variable with "
+            "your LSP first; this tool only changes code."
+        ),
+    )
+    def local_to_field(
+        file: str,
+        line: int,
+        character: int,
+        apply: bool = False,
+        root: str | None = None,
+        expected_symbol: str | None = None,
+    ) -> dict[str, Any]:
+        return _dispatch(
+            lambda: runner.local_to_field(
+                file=file,
+                position=Position(line, character),
+                apply=apply,
+                root=root,
+                expected_symbol=expected_symbol,
+            )
+        )
+
+    @mcp.tool(
+        name="use_function",
+        description=(
+            "Replace code that duplicates a function's body with calls to "
+            "that function, across the whole project. Point at the name "
+            "of a module-level function (0-based LSP line/character, "
+            "UTF-16 units); statements matching its body pattern are "
+            "rewritten into calls. Defaults to a Dry Run preview; set "
+            "apply=true to write. References that cannot be proven are "
+            "reported as uncertain_occurrences. Locate the function with "
+            "your LSP first; this tool only changes code."
+        ),
+    )
+    def use_function(
+        file: str,
+        line: int,
+        character: int,
+        apply: bool = False,
+        root: str | None = None,
+        expected_symbol: str | None = None,
+    ) -> dict[str, Any]:
+        return _dispatch(
+            lambda: runner.use_function(
+                file=file,
+                position=Position(line, character),
+                apply=apply,
+                root=root,
+                expected_symbol=expected_symbol,
             )
         )
 

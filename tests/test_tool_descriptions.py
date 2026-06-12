@@ -16,8 +16,18 @@ from mcp.shared.memory import (
 
 from ropey.server import create_server
 
-POINT_TOOLS = {"rename", "inline", "change_signature", "move"}
-SELECTION_TOOLS = {"extract_method", "extract_variable"}
+POINT_TOOLS = {
+    "rename",
+    "inline",
+    "change_signature",
+    "move",
+    "encapsulate_field",
+    "introduce_factory",
+    "method_object",
+    "local_to_field",
+    "use_function",
+}
+SELECTION_TOOLS = {"extract_method", "extract_variable", "introduce_parameter"}
 FILE_ONLY_TOOLS = {"module_to_package", "organize_imports"}
 
 OVER_STRONG_MODALS = ["CRITICAL", "MUST", "ALWAYS", "NEVER", "IMPORTANT"]

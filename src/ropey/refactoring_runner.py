@@ -17,6 +17,7 @@ import threading
 from collections.abc import Callable
 from typing import Any
 
+from rope.base import evaluate as rope_evaluate
 from rope.base.change import Change, ChangeSet
 from rope.base.project import Project
 from rope.refactor.change_signature import (
@@ -29,9 +30,15 @@ from rope.refactor.extract import ExtractMethod, ExtractVariable
 from rope.refactor.importutils import ImportOrganizer
 from rope.refactor.inline import create_inline
 from rope.refactor import occurrences as rope_occurrences
+from rope.refactor.encapsulate_field import EncapsulateField
+from rope.refactor.introduce_factory import IntroduceFactory
+from rope.refactor.introduce_parameter import IntroduceParameter
+from rope.refactor.localtofield import LocalToField
+from rope.refactor.method_object import MethodObject
 from rope.refactor.move import MoveMethod, create_move
 from rope.refactor.rename import Rename
 from rope.refactor.topackage import ModuleToPackage
+from rope.refactor.usefunction import UseFunction
 
 from .blast_radius_reporter import report
 from .failure_mapper import map_engine_failures
@@ -368,6 +375,134 @@ class RefactoringRunner:
 
         return self._execute(
             tool="change_signature", file=file, root=root, apply=apply, build=build
+        )
+
+    def introduce_parameter(
+        self,
+        *,
+        file: str,
+        selection: Range,
+        parameter_name: str,
+        apply: bool,
+        root: str | None = None,
+    ) -> RefactoringReport:
+        def build(project, resource, collector):
+            start, _ = range_to_offsets(resource.read(), selection)
+            refactoring = IntroduceParameter(project, resource, start)
+            return refactoring.get_changes(parameter_name)
+
+        return self._execute(
+            tool="introduce_parameter", file=file, root=root, apply=apply, build=build
+        )
+
+    def encapsulate_field(
+        self,
+        *,
+        file: str,
+        position: Position,
+        apply: bool,
+        root: str | None = None,
+        expected_symbol: str | None = None,
+        getter_name: str | None = None,
+        setter_name: str | None = None,
+    ) -> RefactoringReport:
+        def build(project, resource, collector):
+            offset = self._point_offset(resource, position, expected_symbol)
+            refactoring = EncapsulateField(project, resource, offset)
+            changes = refactoring.get_changes(
+                getter=getter_name, setter=setter_name
+            )
+            self._surface_uncertain(
+                project, refactoring.name, refactoring.pyname, collector
+            )
+            return changes
+
+        return self._execute(
+            tool="encapsulate_field", file=file, root=root, apply=apply, build=build
+        )
+
+    def introduce_factory(
+        self,
+        *,
+        file: str,
+        position: Position,
+        factory_name: str,
+        apply: bool,
+        root: str | None = None,
+        expected_symbol: str | None = None,
+        global_factory: bool = False,
+    ) -> RefactoringReport:
+        def build(project, resource, collector):
+            offset = self._point_offset(resource, position, expected_symbol)
+            refactoring = IntroduceFactory(project, resource, offset)
+            return refactoring.get_changes(
+                factory_name, global_factory=global_factory
+            )
+
+        return self._execute(
+            tool="introduce_factory", file=file, root=root, apply=apply, build=build
+        )
+
+    def method_object(
+        self,
+        *,
+        file: str,
+        position: Position,
+        class_name: str,
+        apply: bool,
+        root: str | None = None,
+        expected_symbol: str | None = None,
+    ) -> RefactoringReport:
+        def build(project, resource, collector):
+            offset = self._point_offset(resource, position, expected_symbol)
+            refactoring = MethodObject(project, resource, offset)
+            return refactoring.get_changes(classname=class_name)
+
+        return self._execute(
+            tool="method_object", file=file, root=root, apply=apply, build=build
+        )
+
+    def local_to_field(
+        self,
+        *,
+        file: str,
+        position: Position,
+        apply: bool,
+        root: str | None = None,
+        expected_symbol: str | None = None,
+    ) -> RefactoringReport:
+        def build(project, resource, collector):
+            offset = self._point_offset(resource, position, expected_symbol)
+            refactoring = LocalToField(project, resource, offset)
+            return refactoring.get_changes()
+
+        return self._execute(
+            tool="local_to_field", file=file, root=root, apply=apply, build=build
+        )
+
+    def use_function(
+        self,
+        *,
+        file: str,
+        position: Position,
+        apply: bool,
+        root: str | None = None,
+        expected_symbol: str | None = None,
+    ) -> RefactoringReport:
+        def build(project, resource, collector):
+            offset = self._point_offset(resource, position, expected_symbol)
+            refactoring = UseFunction(project, resource, offset)
+            changes = refactoring.get_changes()
+            pyname = rope_evaluate.eval_location(
+                project.get_pymodule(resource), offset
+            )
+            self._surface_uncertain(
+                project, refactoring.pyfunction.get_name(), pyname, collector
+            )
+            return changes
+
+        return self._execute(
+            tool="use_function", file=file, root=root, apply=apply, build=build
         )
 
     def module_to_package(
