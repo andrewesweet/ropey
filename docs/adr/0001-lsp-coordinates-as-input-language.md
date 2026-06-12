@@ -11,4 +11,6 @@ The agent already runs ty as an LSP and gets `{line, character}` Positions and R
 ## Consequences
 
 - The server must convert LSP UTF-16 `character` units to rope's code-point offsets when reading each file. This conversion is the implementer's concern but must be correct for non-ASCII source.
-- Point refactorings take a `Position`; selection refactorings (extract, introduce parameter) take a `Range`.
+- A Location takes one of three forms: file alone (whole-module Targets, e.g. move-module), file + `Position` (point refactorings), file + `Range` (selection refactorings — extract, introduce parameter).
+- **Stale-Location guard.** A Position is only as fresh as the agent's last LSP answer; an intervening edit (formatter-on-save, human editor) can shift it so it addresses different code, and the server would faithfully refactor the wrong Target. Point refactorings therefore accept an optional **Expected Symbol** — the identifier the agent believes is at the Position. On mismatch the call is a Structured Failure, not a wrong transformation. Optional because the agent may legitimately call straight from a fresh read; the docs recommend supplying it whenever edits may have intervened.
+- The same staleness applies to a `Range`, unguarded — accepted risk: a shifted selection produces visibly wrong output in the Dry Run's Blast Radius (an extract of the wrong lines is conspicuous) rather than a quiet cross-file rewrite, and git recovers a bad Live Run. A source-text check on Ranges may be added later if usage shows the need.
