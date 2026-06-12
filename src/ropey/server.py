@@ -11,7 +11,7 @@ from typing import Any
 
 from mcp.server.fastmcp import FastMCP
 
-from .model import FailureKind, Position, StructuredFailure
+from .model import FailureKind, Position, Range, StructuredFailure
 from .operability import configure_logging
 from .project_provider import ProjectProvider
 from .refactoring_runner import RefactoringRunner
@@ -30,11 +30,12 @@ def create_server() -> FastMCP:
     """Compose the server: project cache, lock, and tool registration."""
     runner = RefactoringRunner(ProjectProvider())
     mcp = FastMCP("ropey", instructions=SERVER_INSTRUCTIONS)
-    _register_tools(mcp, runner)
+    _register_rename_tool(mcp, runner)
+    _register_catalogue(mcp, runner)
     return mcp
 
 
-def _run(action) -> dict[str, Any]:
+def _dispatch(action) -> dict[str, Any]:
     """Run one tool call; every refusal becomes a Structured Failure dict."""
     try:
         return action().to_dict()
@@ -48,7 +49,7 @@ def _run(action) -> dict[str, Any]:
         ).to_dict()
 
 
-def _register_tools(mcp: FastMCP, runner: RefactoringRunner) -> None:
+def _register_rename_tool(mcp: FastMCP, runner: RefactoringRunner) -> None:
     @mcp.tool(
         name="rename",
         description=(
@@ -80,7 +81,7 @@ def _register_tools(mcp: FastMCP, runner: RefactoringRunner) -> None:
         in_docstrings_and_comments: bool = False,
         across_class_hierarchy: bool = False,
     ) -> dict[str, Any]:
-        return _run(
+        return _dispatch(
             lambda: runner.rename(
                 file=file,
                 position=Position(line=line, character=character),
@@ -92,6 +93,271 @@ def _register_tools(mcp: FastMCP, runner: RefactoringRunner) -> None:
                 across_class_hierarchy=across_class_hierarchy,
             )
         )
+
+
+def _register_catalogue(mcp: FastMCP, runner: RefactoringRunner) -> None:
+    @mcp.tool(
+        name="move",
+        description=(
+            "Move a Python symbol or module and update imports project-wide. "
+            "Three targets, one tool: a global function/class/variable at a "
+            "Position moves to another module (pass destination: that "
+            "module's file path); a method at a Position moves to the class "
+            "held by an attribute of self (pass destination_attribute, and "
+            "optionally new_name); a whole module or package moves into a "
+            "package when you omit line/character entirely (pass "
+            "destination: the package directory). Coordinates are 0-based "
+            "LSP line/character (UTF-16 units). Defaults to a Dry Run "
+            "preview; set apply=true to write. Prefer a clean git tree "
+            "before applying. Moved resources report old_path; new files "
+            "report created."
+        ),
+    )
+    def move(
+        file: str,
+        destination: str | None = None,
+        line: int | None = None,
+        character: int | None = None,
+        destination_attribute: str | None = None,
+        new_name: str | None = None,
+        apply: bool = False,
+        root: str | None = None,
+        expected_symbol: str | None = None,
+    ) -> dict[str, Any]:
+        return _dispatch(
+            lambda: runner.move(
+                file=file,
+                position=_optional_position(line, character),
+                destination=destination,
+                destination_attribute=destination_attribute,
+                new_name=new_name,
+                apply=apply,
+                root=root,
+                expected_symbol=expected_symbol,
+            )
+        )
+
+    @mcp.tool(
+        name="extract_method",
+        description=(
+            "Extract a selected block of statements (or an expression) into "
+            "a new method or function, with parameters and return values "
+            "inferred from the data flow. Pass the file and the selection "
+            "Range — start_line/start_character to end_line/end_character, "
+            "0-based, character in UTF-16 units, exactly as an editor "
+            "selection. The selection must be complete statements or one "
+            "complete expression. Options: replace_similar replaces other "
+            "occurrences of the same pattern; to_global_scope extracts to "
+            "module level; method_kind makes a classmethod or staticmethod. "
+            "Defaults to a Dry Run preview; set apply=true to write."
+        ),
+    )
+    def extract_method(
+        file: str,
+        start_line: int,
+        start_character: int,
+        end_line: int,
+        end_character: int,
+        name: str,
+        apply: bool = False,
+        root: str | None = None,
+        replace_similar: bool = False,
+        to_global_scope: bool = False,
+        method_kind: str | None = None,
+    ) -> dict[str, Any]:
+        return _dispatch(
+            lambda: runner.extract_method(
+                file=file,
+                selection=Range(
+                    Position(start_line, start_character),
+                    Position(end_line, end_character),
+                ),
+                name=name,
+                apply=apply,
+                root=root,
+                replace_similar=replace_similar,
+                to_global_scope=to_global_scope,
+                method_kind=method_kind,
+            )
+        )
+
+    @mcp.tool(
+        name="extract_variable",
+        description=(
+            "Extract a selected expression into a named variable, replacing "
+            "the expression with the name. Pass the file and the selection "
+            "Range (start_line/start_character to end_line/end_character, "
+            "0-based, UTF-16 units) covering exactly one expression. "
+            "replace_similar also substitutes other occurrences of the same "
+            "expression; to_global_scope creates the variable at module "
+            "level. Defaults to a Dry Run preview; set apply=true to write."
+        ),
+    )
+    def extract_variable(
+        file: str,
+        start_line: int,
+        start_character: int,
+        end_line: int,
+        end_character: int,
+        name: str,
+        apply: bool = False,
+        root: str | None = None,
+        replace_similar: bool = False,
+        to_global_scope: bool = False,
+    ) -> dict[str, Any]:
+        return _dispatch(
+            lambda: runner.extract_variable(
+                file=file,
+                selection=Range(
+                    Position(start_line, start_character),
+                    Position(end_line, end_character),
+                ),
+                name=name,
+                apply=apply,
+                root=root,
+                replace_similar=replace_similar,
+                to_global_scope=to_global_scope,
+            )
+        )
+
+    @mcp.tool(
+        name="inline",
+        description=(
+            "Inline the method, variable, or parameter at a Position — the "
+            "server detects which kind, so just point at the name (0-based "
+            "LSP line/character, UTF-16 units). Methods and variables: "
+            "every certain use is replaced by the body or value; "
+            "remove_definition=false keeps the definition; "
+            "only_current_occurrence=true inlines just the occurrence at "
+            "the Position. Parameters: the default value is written into "
+            "call sites that omit it. Defaults to a Dry Run preview; set "
+            "apply=true to write. Supply expected_symbol when edits may "
+            "have intervened since your LSP answer."
+        ),
+    )
+    def inline(
+        file: str,
+        line: int,
+        character: int,
+        apply: bool = False,
+        root: str | None = None,
+        expected_symbol: str | None = None,
+        remove_definition: bool = True,
+        only_current_occurrence: bool = False,
+        in_docstrings_and_comments: bool = False,
+    ) -> dict[str, Any]:
+        return _dispatch(
+            lambda: runner.inline(
+                file=file,
+                position=Position(line, character),
+                apply=apply,
+                root=root,
+                expected_symbol=expected_symbol,
+                remove_definition=remove_definition,
+                only_current_occurrence=only_current_occurrence,
+                in_docstrings_and_comments=in_docstrings_and_comments,
+            )
+        )
+
+    @mcp.tool(
+        name="change_signature",
+        description=(
+            "Change a function or method signature — add, remove, or "
+            "reorder parameters — updating every certain call site across "
+            "the project. Point at the function name (0-based LSP "
+            "line/character, UTF-16 units) and pass operations, a list "
+            "applied in order: {action:'add', name, index?, default?, "
+            "value?} (default is the parameter's default expression; value "
+            "is what existing call sites should pass), {action:'remove', "
+            "name or index}, {action:'reorder', order:[names or indices "
+            "covering every parameter]}. For methods, parameter lists "
+            "include self (index 0). across_class_hierarchy applies the "
+            "change to matching overrides. Defaults to a Dry Run preview; "
+            "set apply=true to write. Uncertain call sites are reported, "
+            "never silently edited."
+        ),
+    )
+    def change_signature(
+        file: str,
+        line: int,
+        character: int,
+        operations: list[dict[str, Any]],
+        apply: bool = False,
+        root: str | None = None,
+        expected_symbol: str | None = None,
+        across_class_hierarchy: bool = False,
+    ) -> dict[str, Any]:
+        return _dispatch(
+            lambda: runner.change_signature(
+                file=file,
+                position=Position(line, character),
+                operations=operations,
+                apply=apply,
+                root=root,
+                expected_symbol=expected_symbol,
+                across_class_hierarchy=across_class_hierarchy,
+            )
+        )
+
+    @mcp.tool(
+        name="module_to_package",
+        description=(
+            "Convert a Python module file into a package: creates a "
+            "directory of the module's name and moves the module to its "
+            "__init__.py, rewriting relative imports to absolute. Pass the "
+            "module's file path alone; no Position. Defaults to a Dry Run "
+            "preview (created and moved entries appear in the Blast "
+            "Radius); set apply=true to write."
+        ),
+    )
+    def module_to_package(
+        file: str,
+        apply: bool = False,
+        root: str | None = None,
+    ) -> dict[str, Any]:
+        return _dispatch(
+            lambda: runner.module_to_package(file=file, apply=apply, root=root)
+        )
+
+    @mcp.tool(
+        name="organize_imports",
+        description=(
+            "Tidy a module's import block structurally (not formatting — "
+            "black/ruff own that). Pass the file alone; no Position. One "
+            "mode per call: 'organize' (default) sorts, deduplicates, and "
+            "drops unused imports; 'expand_star_imports' replaces `from m "
+            "import *` with explicit names (follow with 'organize' to "
+            "prune unused ones); 'relatives_to_absolutes' rewrites "
+            "relative imports as absolute; 'froms_to_imports' converts "
+            "from-imports to plain imports; 'handle_long_imports' shortens "
+            "deep module paths. Defaults to a Dry Run preview; set "
+            "apply=true to write. An empty blast_radius means the module "
+            "already conforms."
+        ),
+    )
+    def organize_imports(
+        file: str,
+        mode: str = "organize",
+        apply: bool = False,
+        root: str | None = None,
+    ) -> dict[str, Any]:
+        return _dispatch(
+            lambda: runner.organize_imports(
+                file=file, mode=mode, apply=apply, root=root
+            )
+        )
+
+
+def _optional_position(line: int | None, character: int | None) -> Position | None:
+    if line is None and character is None:
+        return None
+    if line is None or character is None:
+        raise StructuredFailure(
+            FailureKind.INVALID_ARGUMENT,
+            "Pass line and character together (a point Location), or omit "
+            "both (a whole-module Location).",
+        )
+    return Position(line, character)
 
 
 def main() -> None:

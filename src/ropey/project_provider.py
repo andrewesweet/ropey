@@ -18,6 +18,7 @@ from collections import OrderedDict
 from dataclasses import dataclass
 from pathlib import Path
 
+from rope.base.fscommands import FileSystemCommands
 from rope.base.project import Project
 
 from .model import FailureKind, StructuredFailure
@@ -32,7 +33,10 @@ class _ScopedProject(Project):
 
     def __init__(self, root: str, policy: ExclusionPolicy | None):
         self._exclusion_policy = policy
-        super().__init__(root, ropefolder=None)
+        # Plain filesystem commands, never rope's VCS-aware ones: `git mv`
+        # fails silently on untracked files, and git detects renames from
+        # plain moves anyway.
+        super().__init__(root, ropefolder=None, fscommands=FileSystemCommands())
 
     def is_ignored(self, resource) -> bool:
         policy = getattr(self, "_exclusion_policy", None)
