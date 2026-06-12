@@ -30,8 +30,8 @@ POINT_TOOLS = {
 SELECTION_TOOLS = {"extract_method", "extract_variable", "introduce_parameter"}
 FILE_ONLY_TOOLS = {"module_to_package", "organize_imports"}
 # Pattern-addressed tools (ADR 0005): exempt from the point/selection
-# coordinate-convention check; they gain their own checks at the landing
-# slice (issue #29).
+# coordinate-convention check (D5); they must explain their own input
+# language and state non-behaviour-preservation instead.
 PATTERN_TOOLS = {"rewrite"}
 
 OVER_STRONG_MODALS = ["CRITICAL", "MUST", "ALWAYS", "NEVER", "IMPORTANT"]
@@ -83,6 +83,20 @@ def test_coordinate_tools_state_the_convention(descriptions):
         text = descriptions[name]
         assert "0-based" in text, f"{name}: 0-based not stated"
         assert "UTF-16" in text, f"{name}: UTF-16 units not stated"
+
+
+def test_pattern_tools_explain_the_input_language(descriptions):
+    for name in PATTERN_TOOLS:
+        text = descriptions[name]
+        for term in ("Pattern", "Goal", "Wildcard", "Match Constraint"):
+            assert term in text, f"{name}: {term} not explained"
+
+
+def test_pattern_tools_state_non_behaviour_preservation(descriptions):
+    for name in PATTERN_TOOLS:
+        assert "not behaviour-preserving" in descriptions[name], (
+            f"{name}: the non-behaviour-preservation statement is missing"
+        )
 
 
 def test_point_tools_document_the_expected_symbol_guard(descriptions):

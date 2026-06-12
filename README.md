@@ -21,7 +21,10 @@ ropey closes that gap with one division of labour:
 The agent points at code using the exact `line`/`character` coordinates its
 LSP already returned, and ropey performs the behaviour-preserving
 transformation across the whole project — rename, move, extract, inline,
-change signature, organize imports, and more.
+change signature, organize imports, and more. One sibling tool, `rewrite`,
+goes further: a pattern→goal transformation for structural changes none of
+the refactorings express — addressed by a code template rather than a
+coordinate, and explicitly *not* behaviour-preserving (see below).
 
 ## The safety contract
 
@@ -38,6 +41,14 @@ change signature, organize imports, and more.
   applies only the certain occurrences and reports every uncertain one as a
   flagged location for the agent to adjudicate — never silently included,
   never silently dropped.
+- **The Rewrite is agent-asserted, and says so.** `rewrite` is the one
+  tool that makes no behaviour-preservation claim: the agent asserts that
+  pattern and goal are equivalent, and the tool guarantees only that it
+  rewrites exactly the matches it reports. In exchange it surfaces *every*
+  Match Site (file + range, flagged `matched` or `unsure`) for the agent
+  to audit, leaves unprovable sites un-rewritten unless explicitly opted
+  in, and refuses outright — in preview *and* apply mode — any rewrite
+  that would produce unparsable Python.
 - **Freshness is self-established.** Before every refactoring the server
   re-checks the source on disk, so edits from any writer — the agent,
   a human editor, `git checkout`, a formatter — are always reflected.
@@ -111,11 +122,17 @@ Or run it directly: `uvx --from git+https://github.com/andrewesweet/ropey ropey`
 | `organize_imports` | Sort, dedupe, expand star-imports, relative→absolute |
 | `introduce_parameter` / `encapsulate_field` | Tier 2 |
 | `introduce_factory` / `method_object` / `local_to_field` / `use_function` | Tier 3 |
+| `rewrite` | Pattern→goal rewrite of every matching site (`${obj}.get_attribute(${key})` → `${obj}[${key}]`), with per-wildcard match constraints, certainty-flagged Match Sites, and a syntax guard — *not* behaviour-preserving; the agent owns the equivalence |
 
 Targets are addressed with LSP coordinates (0-based line/character, UTF-16
 units) — exactly what an LSP returns; byte offsets never appear. Point
 refactorings accept an optional `expected_symbol` so a stale position fails
-loudly instead of refactoring the wrong code.
+loudly instead of refactoring the wrong code. The exception is `rewrite`,
+which is addressed by a *pattern* (Python source with `${wildcard}`
+placeholders) instead of a coordinate, and reports its Match Sites back as
+LSP ranges — ty finds and reads, ropey changes, and for the one tool that
+cannot prove equivalence, ropey shows every site it touched so the agent
+(and `git diff`) can verify.
 
 ## Development
 

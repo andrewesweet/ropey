@@ -51,7 +51,11 @@ Every tool description must:
   reason (stale Locations, git reversal), so the model can generalise.
 - **D5 Exact input language.** 0-based `line`/`character`, character
   in UTF-16 code units, "exactly as the LSP returns"; Range for
-  selections; file-only for whole-module Targets.
+  selections; file-only for whole-module Targets. *Pattern-addressed
+  tools are exempt* (see "The third input category" below): they have
+  no input coordinates, so they state the Pattern/Goal language
+  instead, and the coordinate convention applies to their *output*
+  Ranges.
 - **D6 Transaction model.** `apply` defaults to false (Dry Run
   preview, writes nothing); `apply=true` writes; both report the same
   detail.
@@ -59,6 +63,33 @@ Every tool description must:
   / `git diff` where they guide the agent's next action.
 - **D8 New-colleague test.** Self-contained, no engine internals, no
   glossary dependence beyond what the text itself explains.
+
+## The third input category: Pattern-addressed tools
+
+ADR 0005 admitted the Rewrite, which is neither a point nor a selection
+tool: it is addressed by a **Pattern** and **Goal**, not a Location. For
+these tools the checklist adapts:
+
+- **D5 exemption.** No input coordinates exist, so the 0-based/UTF-16
+  *input* check does not apply. The description instead explains the
+  input language — Pattern, Goal, Wildcard, Match Constraint — by name
+  and with a concrete example, and states the coordinate convention for
+  the Match Site Ranges the tool *returns*.
+- **New mandatory content.** The description must state, in calibrated
+  language: that the tool is **not behaviour-preserving** and the agent
+  owns the Pattern↔Goal equivalence; the routing rule (prefer a
+  dedicated behaviour-preserving refactoring whenever one fits); the
+  Dry-Run-first steer; Match Constraints as the over-match control plus
+  Match Site review; the truncated-audit steer; the no-import-inference
+  responsibility; and clean-tree-before-Live-Run.
+- **D8 unchanged.** Pattern/Goal/Wildcard are rope's *published*
+  vocabulary and cross verbatim (the Conformist seam); rope-internal
+  tokens remain forbidden.
+
+`tests/test_tool_descriptions.py` enforces the mechanical subset: the
+four input-language terms and the non-behaviour-preservation statement
+are present, and Pattern-addressed tools are excluded from the
+point/selection coordinate check.
 
 ## Conformance
 
@@ -75,12 +106,25 @@ unmotivated uncertain_occurrences mention on use_function).
 (calibrated language, apply documented, routing present, no internal
 vocabulary) so regressions fail CI rather than review.
 
+The fifteenth tool, `rewrite` (Pattern-addressed, PRD 0002), was audited
+point-by-point against D1–D8 plus the third-category checks on
+2026-06-12: outcome-first opening with a concrete Pattern/Goal example
+(D1, D5-adapted); calibrated prefer-a-dedicated-refactoring routing
+(D2); LSP routing for navigation and import inference (D3); motivated
+safety throughout — why the agent owns equivalence, why clean tree, why
+unsure sites are excluded by default (D4); transaction model and Dry
+Run default (D6); Blast Radius, Match Sites, certainty, truncation
+steer, and `git diff` (D7); self-contained with no engine internals
+(D8). All seven mandatory content items of the third category are
+present and mechanically enforced where feasible.
+
 | Check | Enforced by |
 | ----- | ----------- |
 | D1, D4, D8 | review against this file (judgement calls) |
 | D2 no over-strong modals | test: forbidden tokens (CRITICAL, MUST, ALWAYS, NEVER, IMPORTANT) |
 | D3 routing present | test: every description names the LSP-or-formatter route |
-| D5 coordinate convention | test: point/selection tools mention "0-based" and "UTF-16" |
+| D5 coordinate convention | test: point/selection tools mention "0-based" and "UTF-16" (Pattern-addressed tools exempt) |
+| Pattern-addressed input language | test: Pattern, Goal, Wildcard, Match Constraint named; "not behaviour-preserving" stated |
 | D6 apply documented | test: every description mentions the Dry Run default and apply=true |
 | D7 result contract | test: writing tools mention preview/Blast Radius terms |
 | D8 no internals | test: forbidden tokens (rope, offset, ChangeSet, Project) |
