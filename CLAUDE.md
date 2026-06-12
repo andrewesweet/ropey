@@ -11,3 +11,10 @@ Five canonical roles use their default label strings (`needs-triage`, `needs-inf
 ### Domain docs
 
 Single-context: one `CONTEXT.md` + `docs/adr/` at repo root. See `docs/agents/domain.md`.
+
+### Documentation kept current
+
+The README's install and catalogue sections are part of the distribution
+contract (PRD "Distribution & human documentation"): update them in the
+same change whenever a phase lands, a tool is added/renamed, or an install
+mechanism changes.
