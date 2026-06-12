@@ -108,8 +108,8 @@ class RefactoringRunner:
         try:
             with Stopwatch() as lock_wait:
                 self._lock.acquire()
-            metrics.lock_wait_ms = lock_wait.ms
             try:
+                metrics.lock_wait_ms = lock_wait.ms
                 scope_root = self._provider.resolve_root(file, root)
                 metrics.root = str(scope_root)
                 with map_engine_failures():
