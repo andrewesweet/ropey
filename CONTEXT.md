@@ -8,9 +8,32 @@ An MCP server that exposes the [rope](https://github.com/python-rope/rope) Pytho
 A behaviour-preserving transformation of Python source that rope can perform (rename, move, extract, inline, change signature, …). Each exposed refactoring becomes one tool.
 _Avoid_: edit, change, modification (too generic).
 
+**Rewrite**:
+A pattern→goal source transformation (rope's Restructure) that is **not** claimed behaviour-preserving: the agent asserts the pattern and goal are equivalent; the tool guarantees only that it rewrites exactly the matches it reports. A sibling of Refactoring, not a kind of it — it shares the whole foundation (Search Scope, Freshness, Blast Radius, Dry Run / Live Run, Uncertain Occurrence, Structured Failure) but addresses its Targets by a structural Pattern rather than a Location. Dry Run plus `git diff` are how the agent verifies the equivalence the tool does not.
+_Avoid_: restructure (rope-internal name), refactoring (reserved for behaviour-preserving).
+
 **Target**:
-The code element a Refactoring acts on. Identified by a Location. Some Targets are named symbols (a function, class, variable); others are an arbitrary expression or statement block (for extract-style refactorings).
+The code element a Refactoring acts on. Identified by a Location. Some Targets are named symbols (a function, class, variable); others are an arbitrary expression or statement block (for extract-style refactorings). A Rewrite is the exception: it has no single Target — it addresses every site matching its Pattern.
 _Avoid_: subject, element, node.
+
+**Pattern** (Rewrite):
+The match template of a Rewrite — Python source with `${wildcard}` placeholders that selects the sites to transform. Adopted verbatim from rope's published Restructure language (a Conformist relationship, like LSP Position/Range), because it is rope's *published* vocabulary, not a rope *internal*.
+
+**Goal** (Rewrite):
+The replacement template of a Rewrite — Python source, referencing the same `${wildcard}` names, that each matched site becomes. Also adopted verbatim from rope's published language.
+
+**Wildcard** (Rewrite):
+A `${name}` placeholder in a Pattern (and reused in the Goal). Binds the matched sub-expression; may be narrowed by a Match Constraint. rope's published term, adopted verbatim.
+
+**Match Constraint** (Rewrite):
+An optional narrowing on a Wildcard — by symbol name, type, object, instance, exactness, or unsure-inclusion. The sole ropey coinage in the Rewrite surface, translating rope's generic `args` (an ACL rename). A constraint may reference a **user** symbol (`type=myapp.models.User`) but never a rope-internal type (`rope.base.pyobjects.PyObject`): that line is the Rewrite ACL seam — rope-published vocabulary crosses, rope-internal vocabulary does not. Match Constraint is also the **designated extension point** for richer matching: rope's custom-wildcard classes (which would program against rope's internal AST) stay out; any future matcher is added as a new named constraint key in *ropey's own* published vocabulary, testable at the boundary.
+_Avoid_: args, checks (rope-internal/generic).
+
+**Match Site** (Rewrite):
+A Location (file + Range) where a Rewrite's Pattern fired. Because a Rewrite is agent-asserted rather than tool-proven, **every** Match Site is surfaced in the result — on both Dry Run and Live Run — as the over-match audit surface, generalizing the [[Uncertain Occurrence]] contract (ADR 0003) from uncertain matches to all matches. One short line each (no file contents); the agent adjudicates each site, then verifies exact text with `git diff` after a Live Run. The file-level Blast Radius answers "which resources changed"; the Match Site list answers "where exactly did the Pattern fire" — the question over-matching turns on, which the per-resource Blast Radius cannot.
+
+Each Match Site carries a **certainty**: *proven* (its Match Constraints were statically satisfied, or it was unconstrained) or *unsure* (a constraint — type/object/instance — could not be proven at that site, common under dynamic typing). An *unsure* Match Site is the Rewrite analogue of an [[Uncertain Occurrence]] (ADR 0003), differing only in trigger: an unprovable Pattern constraint here, an unprovable reference binding there. The `unsure` Match Constraint is the **pre-adjudication knob**: without it, unsure sites are **not** rewritten but **are** surfaced for the agent to adjudicate (re-run, tighten, or hand-edit); with it (per wildcard), those sites **are** rewritten and **stay flagged** unsure in the result. Either way nothing is silently dropped and nothing is silently applied as if certain — the same whole-truth contract as a Refactoring, with adjudication moved before the apply instead of after.
+_Avoid_: hit, occurrence (occurrence is reserved for reference-finding in Refactorings).
 
 **Location**:
 The address of a Target, expressed in the LSP's vocabulary. Takes one of three forms: a file alone (whole-module Targets, e.g. moving a module), a file plus a Position (point Refactorings), or a file plus a Range (selection Refactorings). This is the **published input language** the agent uses; it is exactly what the ty LSP returns from navigation.
@@ -72,7 +95,7 @@ An optional assertion the agent attaches to a point Refactoring: the identifier 
 ## Context map
 
 - **ty / LSP (upstream)**: ropey is a conformist to the LSP published language — Positions and Ranges are adopted verbatim as the input vocabulary.
-- **rope (downstream, foreign model)**: full Anti-Corruption Layer in both directions. Offset (input side) and Change Set (result side) stop at the boundary; rope's `unsure` becomes the Uncertain Occurrence; rope's refusals become Structured Failures. **No rope-internal term ever crosses the tool boundary.**
+- **rope (downstream, foreign model)**: full Anti-Corruption Layer in both directions. Offset (input side) and Change Set (result side) stop at the boundary; rope's `unsure` becomes the Uncertain Occurrence; rope's refusals become Structured Failures. **No rope-internal term ever crosses the tool boundary.** One deliberate exception: for the Rewrite sibling, ropey is a *Conformist* to rope's *published* Restructure language (Pattern, Goal, Wildcard cross verbatim) — published vocabulary is not internal vocabulary. The ACL still holds for rope internals (Offset, ChangeSet, PyObject paths), which is why a Match Constraint may name a user symbol but never a rope-internal type.
 - **Host (Claude Code / OpenCode)**: consumes the tools; in Phase 4 may additionally emit advisory edit events. Correctness never depends on the host.
 
 ## Relationships

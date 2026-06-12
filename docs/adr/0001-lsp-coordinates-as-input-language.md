@@ -2,6 +2,8 @@
 
 The agent already runs ty as an LSP and gets `{line, character}` Positions and Ranges from navigation. We adopt those LSP coordinates verbatim as the address (`Location`) every refactoring tool takes, and the server translates them into rope's internal byte `offset` at its boundary (an Anti-Corruption Layer). The agent never sees an offset and learns no new addressing concept.
 
+Location is the input language for every Refactoring. The one exception is the Rewrite sibling (Restructure), which is Pattern-addressed rather than Location-addressed — see [ADR 0005](0005-restructure-is-a-conformist-non-behaviour-preserving-sibling.md).
+
 ## Considered Options
 
 - **LSP `line:character` (chosen)** — unambiguous, pipes ty's output straight in, thin translation layer.

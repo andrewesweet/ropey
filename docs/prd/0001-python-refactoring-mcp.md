@@ -14,7 +14,7 @@ A Model Context Protocol (MCP) server that exposes rope's **refactoring** catalo
 
 The capability is deliberately scoped to **manipulation**. Navigation stays with ty — the server never duplicates symbol lookup. The division of labour is: **ty finds and reads; ropey changes.**
 
-Every tool shares one foundation (targeting, transaction model, output contract, project/freshness handling, and the uncertainty/failure contract). On top of that foundation, the refactoring catalogue is delivered in a fixed priority order across phases. This PRD specifies the foundation once and then the phased rollout. **Restructure** (rope's pattern→goal rewrite mini-language) is explicitly *not* covered here — it is a sub-DSL that warrants its own design pass and will be a separate follow-up PRD.
+Every tool shares one foundation (targeting, transaction model, output contract, project/freshness handling, and the uncertainty/failure contract). On top of that foundation, the refactoring catalogue is delivered in a fixed priority order across phases. This PRD specifies the foundation once and then the phased rollout. **Restructure** (rope's pattern→goal rewrite mini-language) is explicitly *not* covered here — it is a sub-DSL that warranted its own design pass, now delivered as [PRD 0002](0002-restructure-rewrite.md) (the Rewrite sibling).
 
 The audience for this PRD is the implementation agent. It specifies **what** the capability does for its user (the coding agent) and the constraints it must honour. It deliberately does **not** dictate tool shape, naming, signatures, result-field names, server transport, or runtime — those are the implementer's to decide (see Out of Scope).
 
@@ -160,7 +160,7 @@ These decisions are fixed by the grilling session and the three ADRs. They const
 - **Phase 2 (Tier 2):** Introduce Parameter; Encapsulate Field.
 - **Phase 3 (Tier 3, excluding Restructure):** Introduce Factory; Method Object; Local-to-Field; Use Function. (Change Occurrences is excluded — subsumed by Rename.)
 - **Phase 4 (contingent):** Claude Code Hooks + OpenCode equivalent as an optional, degradable cache-invalidation accelerator. Host `PostToolUse` (`Edit | Write | MultiEdit`) pings the server for a targeted `validate(file)`. **Must not** be a correctness mechanism — hooks see only host-routed edits; the foundation's mandatory self-validate remains the backstop whether or not a hook fired. **Contingent on evidence:** build only if the logged `validate()` timings (see Operability) cross the trigger in the capacity envelope (~250 ms p50 on real repos) — it is a pure accelerator with no capability value. The hook signal is an advisory integration event ("a host edit occurred at *path*"), never a correctness channel.
-- **Phase 5 — separate follow-up PRD:** Restructure (rope's pattern→goal mini-DSL). Forthcoming dedicated PRD; not specified here.
+- **Phase 5 — delivered in [PRD 0002](0002-restructure-rewrite.md):** Restructure (rope's pattern→goal mini-DSL), admitted as the **Rewrite** sibling — Pattern-addressed and not behaviour-preserving (see [ADR 0005](../adr/0005-restructure-is-a-conformist-non-behaviour-preserving-sibling.md)). Specified there, not here.
 
 ## Testing Decisions
 
@@ -189,7 +189,7 @@ A good test here asserts **externally observable behaviour at the tool boundary*
 - **Navigation, reading, and symbol lookup** — owned by ty (the LSP). This server never duplicates them.
 - **Code formatting** — owned by the formatter (black / ruff).
 - **Codegen-from-usage** — rope's `generate` (generate variable/function/class/module/package from an undefined name) is *not* behaviour-preserving and is excluded; scope is refactoring-only.
-- **Restructure** — deferred to its own follow-up PRD.
+- **Restructure** — specified in its own follow-up, [PRD 0002](0002-restructure-rewrite.md) (the Rewrite sibling); not covered by this PRD.
 - **Change Occurrences** — subsumed by Rename; not exposed.
 - **Tool shape and packaging** — number of tools, names, signatures, whether rope APIs are combined or split, exact result-schema field names, MCP transport, and runtime are the implementer's discretion. Distribution *channels* are fixed (Claude Code plugin marketplace, OpenCode native config, generic MCP snippet — see Implementation Decisions); their mechanics remain discretionary.
 
@@ -199,4 +199,4 @@ A good test here asserts **externally observable behaviour at the tool boundary*
 - A reference clone of rope exists locally at `/home/andre/code/github.com/python-rope/rope` for consulting the API and test suite.
 - **Dogfooding (practice, not gate):** the server is implemented in Python 3 (forced anyway — rope is imported in-process), so from the walking skeleton onwards the implementing agent should prefer ropey itself for applicable structural edits to ropey's own source, and file an issue for every friction encountered. Acceptance criteria remain the objective tests; dogfooding is the live user-research loop on top.
 - The asymmetric Search Scope risk is the single most important correctness property to preserve: under-scoping silently corrupts (missed references), whereas over-scoping *tracked* files only costs time (rope is binding-aware and won't touch unrelated same-named symbols). When in doubt, scope wider — except gitignored files, which stay excluded because git cannot revert an edit there.
-- A separate **Restructure** PRD will follow once this capability lands.
+- The separate **Restructure** PRD has landed: [PRD 0002](0002-restructure-rewrite.md), admitting it as the Rewrite sibling.
