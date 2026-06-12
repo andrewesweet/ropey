@@ -18,7 +18,7 @@ import threading
 from rope.refactor.restructure import Restructure
 
 from .blast_radius_reporter import report
-from .failure_mapper import map_engine_failures
+from .engine_session import engine_session
 from .match_enumerator import enumerate_match_sites
 from .model import RewriteReport
 from .operability import CallMetrics, Stopwatch, observed
@@ -53,32 +53,23 @@ class RewriteRunner:
             wildcards = validate_templates(pattern, goal)
             args = validate_constraints(constraints, wildcards)
             import_statements = validate_imports(imports)
-            with Stopwatch() as lock_wait:
-                self._lock.acquire()
-            try:
-                metrics.lock_wait_ms = lock_wait.ms
-                scope_root = self._provider.resolve_root(None, root)
-                metrics.root = str(scope_root)
-                with map_engine_failures():
-                    project = self._provider.get_project(scope_root, metrics)
-                    with Stopwatch() as match_scan:
-                        changes = Restructure(
-                            project,
-                            pattern,
-                            goal,
-                            args=dict(args),
-                            imports=import_statements,
-                        ).get_changes()
-                        match_sites = enumerate_match_sites(
-                            project, pattern, args
-                        )
-                    metrics.match_scan_ms = match_scan.ms
-                    ensure_parsable(changes)
-                    blast_radius = report(changes)
-                    if apply and blast_radius:
-                        project.do(changes)
-            finally:
-                self._lock.release()
+            with engine_session(
+                self._provider, self._lock, metrics, root=root
+            ) as project:
+                with Stopwatch() as match_scan:
+                    changes = Restructure(
+                        project,
+                        pattern,
+                        goal,
+                        args=dict(args),
+                        imports=import_statements,
+                    ).get_changes()
+                    match_sites = enumerate_match_sites(project, pattern, args)
+                metrics.match_scan_ms = match_scan.ms
+                ensure_parsable(changes)
+                blast_radius = report(changes)
+                if apply and blast_radius:
+                    project.do(changes)
             metrics.outcome = "applied" if apply else "dry"
             return RewriteReport(
                 applied=apply,

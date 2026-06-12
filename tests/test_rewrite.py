@@ -644,6 +644,30 @@ class TestSearchScope:
         assert (repo / "generated/gen.py").read_text() == generated
 
 
+class TestOverlappingStatementMatches:
+    def test_an_overlapped_statement_match_is_reported_but_not_included(
+        self, make_repo, call_tool
+    ):
+        # The two-statement Pattern fires on windows (p,q) and (q,r); the
+        # engine rewrites the first and skips the overlapping second. The
+        # report must say so, not claim both were rewritten.
+        repo = make_repo({"overlap.py": "p = 0\nq = 0\nr = 0\n"})
+        report = call_tool(
+            "rewrite",
+            {
+                "pattern": "${a} = 0\n${b} = 0",
+                "goal": "${a} = ${b} = 0",
+                "apply": True,
+                "root": str(repo),
+            },
+        )
+        assert (repo / "overlap.py").read_text() == "p = q = 0\nr = 0\n"
+        assert report["match_site_count"] == 2
+        included = [s["included"] for s in report["match_sites"]]
+        assert included == [True, False]
+        assert "overlap" in report["summary"]
+
+
 class TestNonAsciiMatchSites:
     # The emoji is astral (2 UTF-16 units per code point); the CJK
     # identifiers are BMP. Characters before the match on its line:

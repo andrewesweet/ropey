@@ -163,13 +163,25 @@ class RewriteReport:
         if total == 0:
             return "0 Match Sites — the Pattern fired nowhere in the Search Scope."
         summary = f"{total} Match Sites ({self._unsure_count()} unsure)"
-        excluded = sum(1 for site in self.match_sites if not site.included)
-        if excluded:
+        excluded_unsure = self._excluded(MatchCertainty.UNSURE)
+        if excluded_unsure:
             summary += (
-                f"; {excluded} unsure of those not rewritten — set the unsure "
-                "Match Constraint to include them"
+                f"; {excluded_unsure} unsure of those not rewritten — set the "
+                "unsure Match Constraint to include them"
+            )
+        excluded_matched = self._excluded(MatchCertainty.MATCHED)
+        if excluded_matched:
+            summary += (
+                f"; {excluded_matched} not rewritten because they overlap an "
+                "earlier match — re-run to rewrite successive layers"
             )
         return summary + "."
+
+    def _excluded(self, certainty: MatchCertainty) -> int:
+        return sum(
+            1 for site in self.match_sites
+            if not site.included and site.certainty is certainty
+        )
 
     def _enumerate_within_cap(
         self,

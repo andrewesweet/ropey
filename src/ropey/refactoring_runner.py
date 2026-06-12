@@ -41,7 +41,7 @@ from rope.refactor.topackage import ModuleToPackage
 from rope.refactor.usefunction import UseFunction
 
 from .blast_radius_reporter import report
-from .failure_mapper import map_engine_failures
+from .engine_session import engine_session
 from .location_translator import (
     check_expected_symbol,
     offset_to_position,
@@ -108,28 +108,21 @@ class RefactoringRunner:
     ) -> RefactoringReport:
         metrics = CallMetrics(tool=tool)
         with observed(metrics):
-            with Stopwatch() as lock_wait:
-                self._lock.acquire()
-            try:
-                metrics.lock_wait_ms = lock_wait.ms
-                scope_root = self._provider.resolve_root(file, root)
-                metrics.root = str(scope_root)
-                with map_engine_failures():
-                    project = self._provider.get_project(scope_root, metrics)
-                    resource = (
-                        self._provider.resource_for(project, file)
-                        if file is not None
-                        else None
-                    )
-                    collector = UncertainOccurrenceCollector()
-                    with Stopwatch() as refactoring:
-                        changes = build(project, resource, collector)
-                        blast_radius = report(changes)
-                        if apply:
-                            project.do(changes)
-                    metrics.refactoring_ms = refactoring.ms
-            finally:
-                self._lock.release()
+            with engine_session(
+                self._provider, self._lock, metrics, file=file, root=root
+            ) as project:
+                resource = (
+                    self._provider.resource_for(project, file)
+                    if file is not None
+                    else None
+                )
+                collector = UncertainOccurrenceCollector()
+                with Stopwatch() as refactoring:
+                    changes = build(project, resource, collector)
+                    blast_radius = report(changes)
+                    if apply:
+                        project.do(changes)
+                metrics.refactoring_ms = refactoring.ms
             metrics.outcome = "applied" if apply else "dry"
             return RefactoringReport(
                 applied=apply,
