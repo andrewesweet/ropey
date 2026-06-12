@@ -33,6 +33,7 @@ from .model import (
     StructuredFailure,
     UncertainOccurrence,
 )
+from .operability import CallMetrics, Stopwatch
 from .project_provider import ProjectProvider
 
 
@@ -74,30 +75,52 @@ class RefactoringRunner:
     def _execute(
         self,
         *,
+        tool: str,
         file: str | None,
         root: str | None,
         apply: bool,
         build: Callable[[Project, object, UncertainOccurrenceCollector], Change],
     ) -> RefactoringReport:
-        with self._lock:
-            scope_root = self._provider.resolve_root(file, root)
-            with map_engine_failures():
-                project = self._provider.get_project(scope_root)
-                resource = (
-                    self._provider.resource_for(project, file)
-                    if file is not None
-                    else None
-                )
-                collector = UncertainOccurrenceCollector()
-                changes = build(project, resource, collector)
-                blast_radius = report(changes)
-                if apply:
-                    project.do(changes)
-        return RefactoringReport(
-            applied=apply,
-            blast_radius=blast_radius,
-            uncertain_occurrences=tuple(collector.occurrences),
-        )
+        metrics = CallMetrics(tool=tool)
+        try:
+            with Stopwatch() as lock_wait:
+                self._lock.acquire()
+            metrics.lock_wait_ms = lock_wait.ms
+            try:
+                scope_root = self._provider.resolve_root(file, root)
+                metrics.root = str(scope_root)
+                with map_engine_failures():
+                    project = self._provider.get_project(scope_root, metrics)
+                    resource = (
+                        self._provider.resource_for(project, file)
+                        if file is not None
+                        else None
+                    )
+                    collector = UncertainOccurrenceCollector()
+                    with Stopwatch() as refactoring:
+                        changes = build(project, resource, collector)
+                        blast_radius = report(changes)
+                        if apply:
+                            project.do(changes)
+                    metrics.refactoring_ms = refactoring.ms
+            finally:
+                self._lock.release()
+            metrics.outcome = "applied" if apply else "dry"
+            return RefactoringReport(
+                applied=apply,
+                blast_radius=blast_radius,
+                uncertain_occurrences=tuple(collector.occurrences),
+            )
+        except StructuredFailure as failure:
+            metrics.outcome = "failure"
+            metrics.failure_kind = failure.kind
+            raise
+        except Exception:
+            metrics.outcome = "failure"
+            metrics.failure_kind = "internal-error"
+            raise
+        finally:
+            metrics.emit()
 
     def _point_offset(
         self, resource, position: Position, expected_symbol: str | None
@@ -132,4 +155,6 @@ class RefactoringRunner:
                 unsure=collector,
             )
 
-        return self._execute(file=file, root=root, apply=apply, build=build)
+        return self._execute(
+            tool="rename", file=file, root=root, apply=apply, build=build
+        )

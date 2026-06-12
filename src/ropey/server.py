@@ -12,6 +12,7 @@ from typing import Any
 from mcp.server.fastmcp import FastMCP
 
 from .model import FailureKind, Position, StructuredFailure
+from .operability import configure_logging
 from .project_provider import ProjectProvider
 from .refactoring_runner import RefactoringRunner
 
@@ -94,6 +95,7 @@ def _register_tools(mcp: FastMCP, runner: RefactoringRunner) -> None:
 
 
 def main() -> None:
+    configure_logging()
     create_server().run()
 
 

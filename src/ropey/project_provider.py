@@ -21,6 +21,7 @@ from pathlib import Path
 from rope.base.project import Project
 
 from .model import FailureKind, StructuredFailure
+from .operability import CallMetrics, Stopwatch
 from .scope_resolver import ExclusionPolicy, require_root
 
 _CACHE_CAPACITY = 8
@@ -97,7 +98,7 @@ class ProjectProvider:
             is_directory=lambda p: p.is_dir(),
         )
 
-    def get_project(self, root: Path) -> Project:
+    def get_project(self, root: Path, metrics: CallMetrics | None = None) -> Project:
         """A scoped Project for ``root`` with Freshness re-established.
 
         The gitignore snapshot is re-derived on every call; a changed
@@ -122,7 +123,11 @@ class ProjectProvider:
                     _, evicted = self._cache.popitem(last=False)
                     evicted.project.close()
             self._cache.move_to_end(key)
-        entry.project.validate(entry.project.root)
+        with Stopwatch() as watch:
+            entry.project.validate(entry.project.root)
+        if metrics is not None:
+            metrics.validate_ms = watch.ms
+            metrics.scope_file_count = len(entry.project.get_files())
         return entry.project
 
     def resource_for(self, project: Project, file: str):
