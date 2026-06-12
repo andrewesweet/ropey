@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "ropey": {
+      "command": "uvx",
+      "args": [
+        "--from",
+        "git+https://github.com/andrewesweet/ropey",
+        "ropey"
+      ]
+    }
+  }
+}

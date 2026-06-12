@@ -1,0 +1,13 @@
+{
+  "name": "ropey",
+  "description": "Safe, project-wide Python refactoring tools powered by rope: rename, move, extract, inline, change signature, organize imports, and the full Tier 2/3 catalogue. Every tool previews before writing and reports its full Blast Radius.",
+  "version": "0.1.0",
+  "author": {
+    "name": "Andrew Sweet",
+    "email": "andrew.sweet@cantab.net"
+  },
+  "homepage": "https://github.com/andrewesweet/ropey",
+  "repository": "https://github.com/andrewesweet/ropey",
+  "license": "MIT",
+  "keywords": ["python", "refactoring", "rope", "mcp"]
+}

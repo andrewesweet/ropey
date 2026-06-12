@@ -1,0 +1,14 @@
+{
+  "name": "ropey",
+  "owner": {
+    "name": "Andrew Sweet",
+    "email": "andrew.sweet@cantab.net"
+  },
+  "plugins": [
+    {
+      "name": "ropey",
+      "source": "./plugin/ropey",
+      "description": "Safe, project-wide Python refactoring tools (rename, move, extract, inline, change signature, and more) powered by rope. ty finds and reads; ropey changes."
+    }
+  ]
+}
